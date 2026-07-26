@@ -18,7 +18,7 @@ jobs:
     name: Linux
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install native dependencies
         run: |
           sudo apt-get update
@@ -31,7 +31,7 @@ jobs:
         run: cmake --build --preset test
       - name: Native tests
         run: ctest --preset test
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Browser pitch tests
@@ -51,7 +51,7 @@ jobs:
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install native dependencies
         run: brew install cmake ninja pkg-config portaudio aubio
       - name: Configure
@@ -68,7 +68,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
