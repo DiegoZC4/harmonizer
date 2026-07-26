@@ -1,0 +1,59 @@
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local Harmonizer state
+/.harmonizer_input_device
+/.harmonizer_output_device
+*.log
+
+# Native build products
+/build/
+/build-*/
+/CMakeUserPresets.json
+/.deps/
+/dist/
+/*.dSYM/
+/*.o
+/*.a
+/*.so
+/*.dylib
+/*.dll
+/*.exe
+
+# Root-level binaries produced by the Makefile
+/formant_analyzer
+/harmonizer
+/harmonizer_web
+/harmonizer_web_portable
+/harmonizer_world
+/latency_probe
+/pitch_analyzer
+/polyphonic_analyzer
+/spectrum_analyzer
+/watch_files_macos
+
+# Browser dependencies and generated downloads
+/public/node_modules/
+/public/downloads/
+/public/jacob-collier-jc-note.svg
+
+# Generated audio, captures, and benchmark reports
+/captures/
+/tmp/
+/backend_lab/capture_results/
+/backend_lab/results/
+/fixtures/pitch_reports/
+/fixtures/vocadito/
+
+# Local research sources and downloaded media. Keep only authored notes.
+/Benjamin_Bloomberg_Making_Musical_Magic_Live_2020.pdf
+/Benjamin_Bloomberg_Making_Musical_Magic_Live_2020.txt
+/ben_bloomberg_thesis_handle.html
+/research/jacob_collier/*
+!/research/jacob_collier/PHkKMJ6DCZQ.transcript-notes.md
+!/research/jacob_collier/youtube_feature_catalog.md
+/packaging/source/

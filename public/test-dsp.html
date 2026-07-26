@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>DSP smoke test</title>
+<button id="run" type="button">Run DSP smoke test</button>
+<pre id="status">idle</pre>
+<script type="module">
+  import SignalsmithStretch from "./vendor/SignalsmithStretch.js";
+
+  document.querySelector("#run").addEventListener("click", async () => {
+    const status = document.querySelector("#status");
+    status.textContent = "running";
+    try {
+      const context = new AudioContext({ latencyHint: "interactive" });
+      const stretch = await SignalsmithStretch(context, {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+        channelCount: 1,
+        channelCountMode: "explicit",
+      });
+      await stretch.configure({ blockMs: 48, intervalMs: 12, splitComputation: true });
+      await stretch.start();
+      const latency = await stretch.latency();
+      const oscillator = context.createOscillator();
+      const mute = context.createGain();
+      mute.gain.value = 0;
+      oscillator.connect(stretch).connect(mute).connect(context.destination);
+      oscillator.start();
+      await stretch.schedule({ output: context.currentTime + latency, semitones: 7, formantCompensation: true });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      oscillator.stop();
+      await context.close();
+      status.textContent = Number.isFinite(latency) && latency > 0 ? `passed ${latency.toFixed(4)} s` : `failed latency ${latency}`;
+    } catch (error) {
+      status.textContent = `failed ${error.message}`;
+      console.error(error);
+    }
+  });
+</script>

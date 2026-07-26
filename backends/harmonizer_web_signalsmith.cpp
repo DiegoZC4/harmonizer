@@ -1,0 +1,5 @@
+#define HARMONIZER_ENGINE_HEADER "backends/signalsmith_engine.hpp"
+#define HARMONIZER_DSP_BACKEND "signalsmith-low-latency"
+#define HARMONIZER_BACKEND_KEY "signalsmith"
+#define HARMONIZER_DSP_TITLE "Signalsmith Stretch low latency"
+#include "../harmonizer_web.cpp"

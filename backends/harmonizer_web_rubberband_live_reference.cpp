@@ -1,0 +1,5 @@
+#define HARMONIZER_ENGINE_HEADER "backends/rubberband_live_reference_engine.hpp"
+#define HARMONIZER_DSP_BACKEND "rubberband-live-reference"
+#define HARMONIZER_DSP_TITLE "Rubber Band LiveShifter reference"
+#define HARMONIZER_BACKEND_KEY "live512"
+#include "../harmonizer_web.cpp"

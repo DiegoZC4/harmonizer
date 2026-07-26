@@ -1,0 +1,2203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Harmonizer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #151613;
+      --panel: #20221d;
+      --ink: #f2f0e8;
+      --muted: #a8a59a;
+      --line: rgba(242, 240, 232, 0.14);
+      --cyan: #22d3c5;
+      --green: #77d36a;
+      --gold: #d8a84e;
+      --blue: #76a7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+      overflow: hidden;
+    }
+    .app {
+      width: 100%;
+      min-width: 0;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) 280px;
+    }
+    .stage {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 54px minmax(0, 1fr) 40px;
+      border-right: 1px solid var(--line);
+    }
+    .topbar, .statusbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: #191b17;
+      white-space: nowrap;
+    }
+    .statusbar {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    #lagText {
+      color: var(--blue);
+      font-variant-numeric: tabular-nums;
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .chip {
+      min-width: 84px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chip.good { color: var(--cyan); }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #12130f;
+      touch-action: none;
+    }
+    canvas.panning { cursor: ns-resize; }
+    .view-controls {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .drag-number-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .drag-number-value {
+      flex: 0 0 78px;
+      width: 78px;
+      min-height: 32px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #151613;
+      color: var(--ink);
+      font: inherit;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      cursor: nesw-resize;
+      touch-action: none;
+      user-select: none;
+    }
+    .drag-number-value:focus-visible {
+      border-color: var(--cyan);
+      outline: 1px solid var(--cyan);
+      outline-offset: 1px;
+    }
+    .view-controls .drag-number-control {
+      gap: 4px;
+      font-size: 11px;
+    }
+    .view-controls .drag-number-value {
+      flex-basis: 58px;
+      width: 58px;
+      min-height: 26px;
+      padding: 0 6px;
+    }
+    aside {
+      min-height: 0;
+      overflow-y: auto;
+      background: var(--panel);
+      display: grid;
+      grid-template-rows: 54px;
+      grid-auto-rows: max-content;
+      align-content: start;
+    }
+    .side-title {
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+    .control {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 8px;
+    }
+    .control label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .value {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    .control.drag-number-control { display: flex; }
+    .control.is-disabled { opacity: 0.45; }
+    .orientation-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .orientation-control > span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .pill-toggle {
+      display: grid;
+      gap: 6px;
+    }
+    .pill-toggle-group {
+      position: relative;
+      display: inline-grid;
+      grid-auto-flow: column;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid rgba(118, 167, 255, 0.42);
+      border-radius: 999px;
+      background: #151613;
+    }
+    .pill-thumb {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: calc(50% - 6px);
+      height: calc(100% - 8px);
+      border-radius: 999px;
+      background: var(--ink);
+      pointer-events: none;
+    }
+    .pill-option {
+      position: relative;
+      z-index: 1;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+    }
+    .pill-toggle-group.is-animating .pill-thumb {
+      transition: transform 180ms ease, width 180ms ease;
+    }
+    .pill-toggle-group.is-animating .pill-option {
+      transition: color 180ms ease;
+    }
+    .pill-toggle-group.is-disabled {
+      opacity: 0.45;
+    }
+    .pill-option.is-active {
+      color: #151613;
+    }
+    select {
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #151613;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+    }
+    .levels {
+      display: grid;
+      gap: 6px;
+    }
+    .level-row {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) 50px;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .level-track {
+      height: 5px;
+      overflow: hidden;
+      border-radius: 3px;
+      background: rgba(242, 240, 232, 0.10);
+    }
+    .level-fill {
+      width: 0;
+      height: 100%;
+      background: var(--cyan);
+      transition: width 50ms linear;
+    }
+    #outputLevelFill { background: var(--green); }
+    button {
+      background: transparent;
+      border: 1px solid var(--cyan);
+      border-radius: 8px;
+      color: var(--cyan);
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.rec {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+    .freeze-control { gap: 10px; }
+    .freeze-head, .freeze-row, .freeze-labels {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+    }
+    .freeze-head {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .freeze-head > span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .freeze-labels {
+      color: var(--muted);
+      font-size: 10px;
+      text-align: center;
+    }
+    .freeze-trigger {
+      width: 36px;
+      min-height: 32px;
+      padding: 0;
+      border-color: var(--line);
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .freeze-trigger.is-active {
+      border-color: var(--gold);
+      background: rgba(216, 168, 78, 0.14);
+      color: var(--gold);
+    }
+    .freeze-row .drag-number-value {
+      width: 100%;
+      min-width: 0;
+      padding: 0 5px;
+      text-align: center;
+    }
+    .freeze-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+    }
+    .freeze-actions .drag-number-control { min-width: 0; }
+    .freeze-actions .drag-number-value { width: 72px; flex-basis: 72px; }
+    #clearFreezes { border-color: var(--line); color: var(--muted); }
+    .meter {
+      min-height: 0;
+      align-self: stretch;
+      overflow-y: auto;
+      padding: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .app {
+        height: auto;
+        min-height: 100vh;
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(520px, 1fr) auto;
+      }
+      .stage {
+        width: 100%;
+        min-width: 0;
+        border-right: 0;
+      }
+      .topbar, .statusbar {
+        width: 100%;
+        min-width: 0;
+        overflow: hidden;
+      }
+      aside {
+        overflow-y: visible;
+        grid-template-rows: 44px;
+      }
+    }
+    @media (max-width: 520px) {
+      .topbar {
+        gap: 8px;
+        padding: 0 10px;
+      }
+      .topbar h1 {
+        flex: 0 0 auto;
+        font-size: 16px;
+      }
+      .topbar .chip {
+        min-width: 0;
+        padding: 6px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #pitchChip { flex: 1 1 72px; }
+      #midiChip, #linkChip { flex: 0 1 72px; }
+      .statusbar {
+        gap: 8px;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+      .view-controls .drag-number-control > span { display: none; }
+      .view-controls .drag-number-value { width: 52px; flex-basis: 52px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage">
+      <div class="topbar">
+        <h1>Harmonizer</h1>
+        <div id="pitchChip" class="chip">pitch --</div>
+        <div id="midiChip" class="chip">notes 0</div>
+        <div id="linkChip" class="chip">connecting</div>
+      </div>
+      <canvas id="roll" title="Drag the piano to change the visible pitch range."></canvas>
+      <div class="statusbar">
+        <span id="rmsText">rms 0.0000</span>
+        <span id="stableText">unstable</span>
+        <span id="lagText" title="Retrospective source-to-control pitch residual; excludes pitch-shifter artifacts.">lag est --</span>
+        <div class="view-controls" aria-label="Pitch contour viewport">
+          <label class="drag-number-control">
+            <span>Time</span>
+            <button id="timeSpan" class="drag-number-value" type="button" role="spinbutton"
+                    aria-label="Seconds across screen"></button>
+          </label>
+          <label class="drag-number-control">
+            <span>Pitch</span>
+            <button id="pitchSpan" class="drag-number-value" type="button" role="spinbutton"
+                    aria-label="Semitones across screen"></button>
+          </label>
+        </div>
+      </div>
+    </section>
+    <aside>
+      <div class="side-title">Controls</div>
+      <div class="control">
+        <label for="backend">Pitch shifter <span id="backendValue" class="value">loading</span></label>
+        <select id="backend" aria-label="Pitch shifting backend"></select>
+      </div>
+      <div class="control">
+        <label for="audioInput">Input <span id="audioInputValue" class="value">loading</span></label>
+        <select id="audioInput" aria-label="Audio input device"></select>
+        <label for="audioOutput">Output <span id="audioOutputValue" class="value">loading</span></label>
+        <select id="audioOutput" aria-label="Audio output device"></select>
+        <label for="midiInput">MIDI input <span id="midiInputValue" class="value">loading</span></label>
+        <select id="midiInput" aria-label="MIDI input device">
+          <option value="all">All MIDI devices</option>
+          <option value="none">None</option>
+        </select>
+        <div class="levels" aria-label="Audio levels">
+          <div class="level-row">
+            <span>in</span>
+            <div class="level-track"><div id="inputLevelFill" class="level-fill"></div></div>
+            <span id="inputLevelText">-inf</span>
+          </div>
+          <div class="level-row">
+            <span>out</span>
+            <div class="level-track"><div id="outputLevelFill" class="level-fill"></div></div>
+            <span id="outputLevelText">-inf</span>
+          </div>
+        </div>
+        <button id="testToneBtn" type="button">test output</button>
+      </div>
+      <label class="control drag-number-control">
+        <span>Blend</span>
+        <button id="mix" class="drag-number-value" type="button" role="spinbutton" aria-label="Wet dry blend"></button>
+      </label>
+      <label id="immediacyControl" class="control drag-number-control">
+        <span>Immediacy</span>
+        <button id="immediacy" class="drag-number-value" type="button" role="spinbutton" aria-label="Parallel onset contribution"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Monitor gain</span>
+        <button id="gain" class="drag-number-value" type="button" role="spinbutton" aria-label="Monitor gain"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Gate</span>
+        <button id="gate" class="drag-number-value" type="button" role="spinbutton" aria-label="Pitch gate"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Stability</span>
+        <button id="stable" class="drag-number-value" type="button" role="spinbutton" aria-label="Pitch stability window"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Glide amount</span>
+        <button id="glideAmount" class="drag-number-value" type="button" role="spinbutton" aria-label="Glide amount"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Glide time</span>
+        <button id="glideTimeMs" class="drag-number-value" type="button" role="spinbutton" aria-label="Glide duration"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Chorus</span>
+        <button id="chorusMix" class="drag-number-value" type="button" role="spinbutton" aria-label="Chorus mix"></button>
+      </label>
+      <label class="control drag-number-control">
+        <span>Reverb</span>
+        <button id="reverbMix" class="drag-number-value" type="button" role="spinbutton" aria-label="Reverb mix"></button>
+      </label>
+      <section class="control freeze-control" aria-label="Freeze layers">
+        <div class="freeze-head">
+          <span>Freeze</span>
+          <div class="pill-toggle">
+            <div id="freezeModeGroup" class="pill-toggle-group" role="tablist" aria-label="Freeze trigger mode">
+              <span class="pill-thumb" aria-hidden="true"></span>
+              <button id="freezeLatchMode" class="pill-option" type="button" role="tab">Latch</button>
+              <button id="freezeMomentaryMode" class="pill-option" type="button" role="tab">Momentary</button>
+            </div>
+          </div>
+        </div>
+        <div class="freeze-labels" aria-hidden="true"><span></span><span>level</span><span>shift</span></div>
+        <div class="freeze-row">
+          <button id="freeze1Trigger" class="freeze-trigger" type="button" aria-label="Trigger freeze layer 1">1</button>
+          <button id="freeze1Level" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze layer 1 level"></button>
+          <button id="freeze1Transpose" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze layer 1 transposition"></button>
+        </div>
+        <div class="freeze-row">
+          <button id="freeze2Trigger" class="freeze-trigger" type="button" aria-label="Trigger freeze layer 2">2</button>
+          <button id="freeze2Level" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze layer 2 level"></button>
+          <button id="freeze2Transpose" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze layer 2 transposition"></button>
+        </div>
+        <div class="freeze-row">
+          <button id="freeze3Trigger" class="freeze-trigger" type="button" aria-label="Trigger freeze layer 3">3</button>
+          <button id="freeze3Level" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze layer 3 level"></button>
+          <button id="freeze3Transpose" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze layer 3 transposition"></button>
+        </div>
+        <div class="freeze-actions">
+          <label class="drag-number-control">
+            <span>Tone</span>
+            <button id="freezeTone" class="drag-number-value" type="button" role="spinbutton" aria-label="Freeze open closed tone"></button>
+          </label>
+          <button id="clearFreezes" type="button">clear</button>
+        </div>
+      </section>
+      <div class="control orientation-control">
+        <span>Unvoiced</span>
+        <div class="pill-toggle">
+          <div id="unvoicedGroup" class="pill-toggle-group" role="tablist" aria-label="Unvoiced audio handling">
+            <span class="pill-thumb" aria-hidden="true"></span>
+            <button id="tcBypassMode" class="pill-option" type="button" role="tab">TC bypass</button>
+            <button id="holdRatioMode" class="pill-option" type="button" role="tab">Hold ratio</button>
+          </div>
+        </div>
+      </div>
+      <label class="control drag-number-control">
+        <span>Keyboard octave</span>
+        <button id="keyboardOctave" class="drag-number-value" type="button" role="spinbutton" aria-label="Computer keyboard start octave"></button>
+      </label>
+      <div class="control orientation-control">
+        <span>Scroll direction</span>
+        <div class="pill-toggle">
+          <div id="orientationGroup" class="pill-toggle-group" role="tablist" aria-label="Scroll direction">
+            <span class="pill-thumb" aria-hidden="true"></span>
+            <button id="horizontalFlow" class="pill-option" type="button" role="tab">Horizontal</button>
+            <button id="verticalFlow" class="pill-option" type="button" role="tab">Vertical</button>
+          </div>
+        </div>
+      </div>
+      <div class="control">
+        <label for="captureBtn">Capture <span id="captureValue" class="value"></span></label>
+        <button id="captureBtn" type="button">record</button>
+      </div>
+      <div class="meter" id="meter"></div>
+    </aside>
+  </main>
+  <script>
+    const PIANO_WIDTH = 64;
+    const PIANO_HEIGHT = 72;
+    const MIN_TIME_SPAN = 1;
+    const MAX_TIME_SPAN = 60;
+    const MIN_PITCH_SPAN = 6;
+    const MAX_PITCH_SPAN = 96;
+    const LOWEST_PITCH = 12;
+    const HIGHEST_PITCH = 120;
+    const canvas = document.getElementById('roll');
+    const ctx = canvas.getContext('2d');
+    const pitchChip = document.getElementById('pitchChip');
+    const midiChip = document.getElementById('midiChip');
+    const linkChip = document.getElementById('linkChip');
+    const rmsText = document.getElementById('rmsText');
+    const stableText = document.getElementById('stableText');
+    const lagText = document.getElementById('lagText');
+    const meter = document.getElementById('meter');
+    const backend = document.getElementById('backend');
+    const backendValue = document.getElementById('backendValue');
+    const audioInput = document.getElementById('audioInput');
+    const audioInputValue = document.getElementById('audioInputValue');
+    const audioOutput = document.getElementById('audioOutput');
+    const audioOutputValue = document.getElementById('audioOutputValue');
+    const midiInput = document.getElementById('midiInput');
+    const midiInputValue = document.getElementById('midiInputValue');
+    const inputLevelFill = document.getElementById('inputLevelFill');
+    const outputLevelFill = document.getElementById('outputLevelFill');
+    const inputLevelText = document.getElementById('inputLevelText');
+    const outputLevelText = document.getElementById('outputLevelText');
+    const testToneBtn = document.getElementById('testToneBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const captureValue = document.getElementById('captureValue');
+    const timeSpanInput = document.getElementById('timeSpan');
+    const pitchSpanInput = document.getElementById('pitchSpan');
+    const orientationGroup = document.getElementById('orientationGroup');
+    const horizontalFlow = document.getElementById('horizontalFlow');
+    const verticalFlow = document.getElementById('verticalFlow');
+    const unvoicedGroup = document.getElementById('unvoicedGroup');
+    const tcBypassMode = document.getElementById('tcBypassMode');
+    const holdRatioMode = document.getElementById('holdRatioMode');
+    const freezeModeGroup = document.getElementById('freezeModeGroup');
+    const freezeLatchMode = document.getElementById('freezeLatchMode');
+    const freezeMomentaryMode = document.getElementById('freezeMomentaryMode');
+    const freezeTriggers = [1, 2, 3].map((layer) =>
+      document.getElementById(`freeze${layer}Trigger`));
+    const clearFreezes = document.getElementById('clearFreezes');
+    const immediacyControl = document.getElementById('immediacyControl');
+    let lastCaptureDir = '';
+    const controls = {
+      mix: document.getElementById('mix'),
+      immediacy: document.getElementById('immediacy'),
+      gain: document.getElementById('gain'),
+      gate: document.getElementById('gate'),
+      stable: document.getElementById('stable'),
+      glideAmount: document.getElementById('glideAmount'),
+      glideTimeMs: document.getElementById('glideTimeMs'),
+      chorusMix: document.getElementById('chorusMix'),
+      reverbMix: document.getElementById('reverbMix'),
+      freeze1Level: document.getElementById('freeze1Level'),
+      freeze1Transpose: document.getElementById('freeze1Transpose'),
+      freeze2Level: document.getElementById('freeze2Level'),
+      freeze2Transpose: document.getElementById('freeze2Transpose'),
+      freeze3Level: document.getElementById('freeze3Level'),
+      freeze3Transpose: document.getElementById('freeze3Transpose'),
+      freezeTone: document.getElementById('freezeTone'),
+      keyboardOctave: document.getElementById('keyboardOctave'),
+    };
+    const formatTranspose = (value) => {
+      const rounded = Math.round(value);
+      const text = Math.abs(value - rounded) < 0.005 ? String(rounded) : value.toFixed(2);
+      return `${value > 0 ? '+' : ''}${text} st`;
+    };
+    const controlConfigs = {
+      mix: { min: 0, max: 1, step: 0.01, start: 1, format: (value) => `${Math.round(value * 100)}% wet` },
+      immediacy: { min: 0, max: 1, step: 0.01, start: 0.25, format: (value) => `${Math.round(value * 100)}% onset` },
+      gain: { min: 0, max: 30, step: 1, start: 6, format: (value) => `+${Math.round(value)} dB` },
+      gate: { min: 0.0001, max: 0.03, step: 0.0001, start: 0.01, format: (value) => value.toFixed(4) },
+      stable: { min: 0.2, max: 2, step: 0.01, start: 1, format: (value) => `${value.toFixed(2)} st` },
+      glideAmount: { min: 0, max: 1, step: 0.01, start: 0, format: (value) => `${Math.round(value * 100)}%` },
+      glideTimeMs: { min: 10, max: 2000, step: 10, start: 280, format: (value) => `${Math.round(value)} ms` },
+      chorusMix: { min: 0, max: 1, step: 0.01, start: 0, format: (value) => `${Math.round(value * 100)}%` },
+      reverbMix: { min: 0, max: 1, step: 0.01, start: 0, format: (value) => `${Math.round(value * 100)}%` },
+      freeze1Level: { min: 0, max: 1.25, step: 0.01, start: 0.5, format: (value) => `${Math.round(value * 100)}%` },
+      freeze1Transpose: { min: -24, max: 24, step: 0.01, start: 0, pixelsPerStep: 0.25, format: formatTranspose },
+      freeze2Level: { min: 0, max: 1.25, step: 0.01, start: 0.5, format: (value) => `${Math.round(value * 100)}%` },
+      freeze2Transpose: { min: -24, max: 24, step: 0.01, start: 0, pixelsPerStep: 0.25, format: formatTranspose },
+      freeze3Level: { min: 0, max: 1.25, step: 0.01, start: 0.5, format: (value) => `${Math.round(value * 100)}%` },
+      freeze3Transpose: { min: -24, max: 24, step: 0.01, start: 0, pixelsPerStep: 0.25, format: formatTranspose },
+      freezeTone: { min: 0, max: 1, step: 0.01, start: 1, format: (value) => `${Math.round(value * 100)}% open` },
+      keyboardOctave: { min: 0, max: 5, step: 1, start: 3, server: false, format: (value) => String(Math.round(value)) },
+    };
+    const savedControlValues = {};
+    let savedUnvoicedMode = storedSetting('unvoicedMode', '') === 'hold-ratio'
+      ? 'hold-ratio'
+      : storedSetting('unvoicedMode', '') === 'tc-bypass' ? 'tc-bypass' : null;
+    let unvoicedMode = savedUnvoicedMode || 'tc-bypass';
+    let freezeMode = storedSetting('freezeMode', 'latch') === 'momentary'
+      ? 'momentary'
+      : 'latch';
+    const history = [];
+    const pitchTelemetryHistory = [];
+    const pitchObservations = [];
+    let pitchTelemetryServerInstance = '';
+    let lastPitchTelemetryId = 0;
+    let lastLagMetricUpdate = 0;
+    let state = null;
+    let applyingRemote = false;
+    let controlsInitialized = false;
+    let pendingBackend = '';
+    let backendSwitchTimer = 0;
+    let browserMidiStatus = 'keys ready';
+    let midiAccess = null;
+    let pianoDrag = null;
+    const heldComputerKeys = new Map();
+    const computerKeyboardLayout = [
+      ['ShiftLeft', 0, '\u21e7'],
+      ['KeyA', 1, 'A'], ['KeyZ', 2, 'Z'], ['KeyS', 3, 'S'], ['KeyX', 4, 'X'], ['KeyD', 5, 'D'],
+      ['KeyC', 6, 'C'], ['KeyV', 7, 'V'], ['KeyG', 8, 'G'], ['KeyB', 9, 'B'], ['KeyH', 10, 'H'],
+      ['KeyN', 11, 'N'], ['KeyM', 12, 'M'], ['KeyK', 13, 'K'], ['Comma', 14, ','], ['KeyL', 15, 'L'],
+      ['Period', 16, '.'], ['Semicolon', 17, ';'], ['Slash', 18, '/'],
+      ['Tab', 19, '\u21b9'],
+      ['Digit1', 20, '1'], ['KeyQ', 21, 'Q'], ['Digit2', 22, '2'], ['KeyW', 23, 'W'], ['KeyE', 24, 'E'],
+      ['Digit4', 25, '4'], ['KeyR', 26, 'R'], ['Digit5', 27, '5'], ['KeyT', 28, 'T'], ['Digit6', 29, '6'],
+      ['KeyY', 30, 'Y'], ['KeyU', 31, 'U'], ['Digit8', 32, '8'], ['KeyI', 33, 'I'], ['Digit9', 34, '9'],
+      ['KeyO', 35, 'O'], ['KeyP', 36, 'P'], ['Minus', 37, '-'], ['BracketLeft', 38, '['],
+      ['Equal', 39, '='], ['BracketRight', 40, ']'], ['Backspace', 41, '\u232b'], ['Backslash', 42, '\\'],
+    ];
+    let computerKeyboardNotes = new Map();
+    let computerKeyboardLabels = new Map();
+
+    function rebuildComputerKeyboardMap(octave = 3) {
+      const startNote = (Math.round(octave) + 1) * 12 + 5;
+      computerKeyboardNotes = new Map();
+      computerKeyboardLabels = new Map();
+      for (const [code, semitone, label] of computerKeyboardLayout) {
+        const note = startNote + semitone;
+        if (note < 0 || note > 127) continue;
+        computerKeyboardNotes.set(code, note);
+        computerKeyboardLabels.set(note, label);
+      }
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function storedNumber(key, fallback) {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored === null) return fallback;
+        const value = Number(stored);
+        return Number.isFinite(value) ? value : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function storeNumber(key, value) {
+      try {
+        localStorage.setItem(key, String(value));
+      } catch {}
+    }
+
+    function storedSetting(key, fallback = '') {
+      try {
+        return localStorage.getItem(`harmonizer.native.v1.${key}`) ?? fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function storeSetting(key, value) {
+      try {
+        localStorage.setItem(`harmonizer.native.v1.${key}`, String(value));
+      } catch {}
+    }
+
+    function migrateStoredSettings() {
+      try {
+        const migrationKey = 'harmonizer.native.v2.fullWetDefault';
+        if (localStorage.getItem(migrationKey)) return;
+        const mixKey = 'harmonizer.native.v1.mix';
+        if (localStorage.getItem(mixKey) === '0.56') {
+          localStorage.setItem(mixKey, '1');
+        }
+        localStorage.setItem(migrationKey, '1');
+      } catch {}
+    }
+
+    migrateStoredSettings();
+
+    const view = {
+      seconds: clamp(storedNumber('harmonizer.view.seconds', 12), MIN_TIME_SPAN, MAX_TIME_SPAN),
+      semitones: clamp(storedNumber('harmonizer.view.semitones', 48), MIN_PITCH_SPAN, MAX_PITCH_SPAN),
+      centerMidi: storedNumber('harmonizer.view.centerMidi', 60),
+      orientation: storedSetting('orientation', 'horizontal') === 'vertical' ? 'vertical' : 'horizontal',
+    };
+
+    function clampViewCenter(center, semitones = view.semitones) {
+      const half = semitones / 2;
+      return clamp(center, LOWEST_PITCH + half, HIGHEST_PITCH - half);
+    }
+
+    view.centerMidi = clampViewCenter(view.centerMidi);
+
+    function midiName(note) {
+      const names = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+      return `${names[note % 12]}${Math.floor(note / 12) - 1}`;
+    }
+
+    function visiblePitchMin() {
+      return view.centerMidi - view.semitones / 2;
+    }
+
+    function visiblePitchMax() {
+      return view.centerMidi + view.semitones / 2;
+    }
+
+    function noteY(note, height) {
+      return (visiblePitchMax() - note) * height / view.semitones;
+    }
+
+    function noteX(note, width) {
+      return (note - visiblePitchMin()) * width / view.semitones;
+    }
+
+    function fitCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.max(1, Math.floor(rect.width * dpr));
+      const h = Math.max(1, Math.floor(rect.height * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function niceTimeStep(seconds, width) {
+      const rough = seconds / Math.max(2, Math.floor(width / 90));
+      const power = 10 ** Math.floor(Math.log10(rough));
+      const normalized = rough / power;
+      const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+      return factor * power;
+    }
+
+    function formatTimeLabel(seconds) {
+      if (seconds < 1) return seconds.toFixed(1);
+      return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1);
+    }
+
+    function timeX(timestamp, now, width) {
+      const rollWidth = Math.max(1, width - PIANO_WIDTH);
+      return rollWidth * (timestamp - (now - view.seconds)) / view.seconds;
+    }
+
+    function timeY(timestamp, now, height) {
+      const rollHeight = Math.max(1, height - PIANO_HEIGHT);
+      return rollHeight * (timestamp - (now - view.seconds)) / view.seconds;
+    }
+
+    function resetPitchTelemetry(serverInstance = '') {
+      pitchTelemetryHistory.length = 0;
+      pitchObservations.length = 0;
+      pitchTelemetryServerInstance = serverInstance;
+      lastPitchTelemetryId = 0;
+      lastLagMetricUpdate = 0;
+      lagText.textContent = 'lag est --';
+    }
+
+    function pitchAtSample(sample) {
+      if (!Number.isFinite(sample) || sample <= 0 || pitchObservations.length === 0) {
+        return NaN;
+      }
+      let low = 0;
+      let high = pitchObservations.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (pitchObservations[middle].sample < sample) low = middle + 1;
+        else high = middle;
+      }
+      const after = pitchObservations[low];
+      if (after && after.sample === sample) return after.rawMidi;
+      const before = pitchObservations[low - 1];
+      if (!before || !after || after.sample - before.sample > 1024) return NaN;
+      if (!(before.rawMidi > 0) || !(after.rawMidi > 0)) return NaN;
+      const amount = (sample - before.sample) / (after.sample - before.sample);
+      return before.rawMidi + (after.rawMidi - before.rawMidi) * amount;
+    }
+
+    function resolvePitchResiduals() {
+      for (const frame of pitchTelemetryHistory) {
+        if (frame.residualResolved) continue;
+        const earlySource = pitchAtSample(frame.earlySample);
+        const qualitySource = pitchAtSample(frame.qualitySample);
+        frame.earlyResidual = earlySource > 0 && frame.earlyMidi > 0
+          ? earlySource - frame.earlyMidi
+          : NaN;
+        frame.qualityResidual = qualitySource > 0 && frame.qualityMidi > 0
+          ? qualitySource - frame.qualityMidi
+          : NaN;
+
+        const earlyAudible = frame.earlyWeight > 0.001;
+        if (earlyAudible && Number.isFinite(frame.earlyResidual)) {
+          frame.lagResidual = frame.earlyResidual;
+          frame.lagPath = 'early';
+          frame.residualResolved = true;
+        } else if (!earlyAudible && Number.isFinite(frame.qualityResidual)) {
+          frame.lagResidual = frame.qualityResidual;
+          frame.lagPath = 'quality';
+          frame.residualResolved = true;
+        } else if (Number.isFinite(frame.qualityResidual)) {
+          frame.lagResidual = frame.qualityResidual;
+          frame.lagPath = 'quality';
+          frame.residualResolved = true;
+        }
+      }
+    }
+
+    function ingestPitchTelemetry(next, receivedAt) {
+      const serverInstance = String(next.serverInstance || '');
+      if (serverInstance !== pitchTelemetryServerInstance) {
+        resetPitchTelemetry(serverInstance);
+      }
+      const sampleRate = Number(next.sampleRate) || 44100;
+      const serverSample = Number(next.sampleClock);
+      const samples = Array.isArray(next.pitchTelemetry)
+        ? next.pitchTelemetry
+            .filter((sample) => Number(sample.id) > lastPitchTelemetryId)
+            .sort((a, b) => Number(a.id) - Number(b.id))
+        : [];
+      if (samples.length === 0 || !Number.isFinite(serverSample)) return;
+
+      for (const sample of samples) {
+        const rawSample = Number(sample.rawSample);
+        if (!(rawSample > 0)) continue;
+        const rawMidi = Number(sample.rawMidi);
+        const rawReceivedAt = receivedAt - (serverSample - rawSample) / sampleRate;
+        const previous = pitchObservations[pitchObservations.length - 1];
+        if (previous && previous.sample === rawSample) {
+          previous.rawMidi = rawMidi;
+          continue;
+        }
+        if (!previous || rawSample > previous.sample) {
+          pitchObservations.push({
+            sample: rawSample,
+            rawMidi,
+            receivedAt: rawReceivedAt,
+          });
+        }
+      }
+
+      for (const sample of samples) {
+        const id = Number(sample.id);
+        const dspSample = Number(sample.sample);
+        if (!(id > lastPitchTelemetryId) || !Number.isFinite(dspSample)) continue;
+        pitchTelemetryHistory.push({
+          id,
+          sample: dspSample,
+          receivedAt: receivedAt - (serverSample - dspSample) / sampleRate,
+          rawMidi: Number(sample.rawMidi),
+          earlySample: Number(sample.earlySample),
+          earlyMidi: Number(sample.earlyMidi),
+          qualitySample: Number(sample.qualitySample),
+          qualityMidi: Number(sample.qualityMidi),
+          earlyWeight: Number(sample.earlyWeight) || 0,
+          pitchBend: Number(sample.pitchBend) || 0,
+          notes: Array.isArray(sample.notes) ? sample.notes.map(Number) : [],
+          residualResolved: false,
+          lagResidual: NaN,
+          lagPath: '',
+        });
+        lastPitchTelemetryId = id;
+      }
+
+      resolvePitchResiduals();
+      const oldestAllowed = receivedAt - MAX_TIME_SPAN - 2;
+      let telemetryPrune = 0;
+      while (telemetryPrune < pitchTelemetryHistory.length &&
+             pitchTelemetryHistory[telemetryPrune].receivedAt < oldestAllowed) {
+        telemetryPrune += 1;
+      }
+      if (telemetryPrune > 0) pitchTelemetryHistory.splice(0, telemetryPrune);
+
+      let observationPrune = 0;
+      while (observationPrune + 1 < pitchObservations.length &&
+             pitchObservations[observationPrune + 1].receivedAt < oldestAllowed) {
+        observationPrune += 1;
+      }
+      if (observationPrune > 0) pitchObservations.splice(0, observationPrune);
+    }
+
+    function updateLagMetrics(now) {
+      if (now - lastLagMetricUpdate < 0.20) return;
+      lastLagMetricUpdate = now;
+      const windowStart = now - view.seconds;
+      const cents = pitchTelemetryHistory
+        .filter((frame) => frame.receivedAt >= windowStart && frame.notes.length > 0 &&
+                           Number.isFinite(frame.lagResidual))
+        .map((frame) => Math.abs(frame.lagResidual) * 100)
+        .sort((a, b) => a - b);
+      if (cents.length === 0) {
+        lagText.textContent = 'lag est --';
+        return;
+      }
+      const p95 = cents[Math.min(cents.length - 1, Math.floor(cents.length * 0.95))];
+      const peak = cents[cents.length - 1];
+      lagText.textContent = `lag p95 ${Math.round(p95)}c max ${Math.round(peak)}c`;
+    }
+
+    function drawRollGrid(width, height) {
+      const horizontal = view.orientation === 'horizontal';
+      const rollWidth = horizontal ? Math.max(1, width - PIANO_WIDTH) : width;
+      const rollHeight = horizontal ? height : Math.max(1, height - PIANO_HEIGHT);
+      const pitchMin = visiblePitchMin();
+      const pitchMax = visiblePitchMax();
+
+      for (let note = Math.ceil(pitchMin); note <= Math.floor(pitchMax); note += 1) {
+        const octave = note % 12 === 0;
+        if (!octave && view.semitones > 24) continue;
+        ctx.strokeStyle = octave ? 'rgba(242,240,232,0.15)' : 'rgba(242,240,232,0.045)';
+        ctx.beginPath();
+        if (horizontal) {
+          const y = noteY(note, height);
+          ctx.moveTo(0, y);
+          ctx.lineTo(rollWidth, y);
+        } else {
+          const x = noteX(note, width);
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, rollHeight);
+        }
+        ctx.stroke();
+      }
+
+      const timeStep = niceTimeStep(view.seconds, horizontal ? rollWidth : rollHeight);
+      for (let age = 0; age <= view.seconds + timeStep * 0.25; age += timeStep) {
+        ctx.strokeStyle = age === 0 ? 'rgba(242,240,232,0.13)' : 'rgba(242,240,232,0.07)';
+        ctx.beginPath();
+        const label = age === 0 ? 'now' : `-${formatTimeLabel(age)}s`;
+        ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+        const labelWidth = ctx.measureText(label).width;
+        if (horizontal) {
+          const x = rollWidth * (view.seconds - age) / view.seconds;
+          if (x < -0.5) continue;
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, rollHeight);
+          ctx.stroke();
+          const labelX = clamp(x, labelWidth / 2 + 4, rollWidth - labelWidth / 2 - 4);
+          ctx.fillStyle = 'rgba(18,19,15,0.82)';
+          ctx.fillRect(labelX - labelWidth / 2 - 3, rollHeight - 17, labelWidth + 6, 14);
+          ctx.fillStyle = 'rgba(242,240,232,0.48)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillText(label, labelX, rollHeight - 6);
+        } else {
+          const y = rollHeight * (view.seconds - age) / view.seconds;
+          if (y < -0.5) continue;
+          ctx.moveTo(0, y);
+          ctx.lineTo(rollWidth, y);
+          ctx.stroke();
+          const labelY = clamp(y, 8, rollHeight - 8);
+          ctx.fillStyle = 'rgba(18,19,15,0.82)';
+          ctx.fillRect(width - labelWidth - 10, labelY - 7, labelWidth + 7, 14);
+          ctx.fillStyle = 'rgba(242,240,232,0.48)';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, width - 6, labelY);
+        }
+      }
+    }
+
+    function drawMidiNotes(frames, now, width, height) {
+      const horizontal = view.orientation === 'horizontal';
+      const rollWidth = horizontal ? Math.max(1, width - PIANO_WIDTH) : width;
+      const rollHeight = horizontal ? height : Math.max(1, height - PIANO_HEIGHT);
+      const pitchMin = visiblePitchMin();
+      const pitchMax = visiblePitchMax();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, rollWidth, rollHeight);
+      ctx.clip();
+      for (let i = 0; i < frames.length; i += 1) {
+        const frame = frames[i];
+        const nextTime = i + 1 < frames.length ? frames[i + 1].receivedAt : now;
+        for (const note of frame.notes || []) {
+          const bentNote = Number(note) + Number(frame.pitchBend || 0);
+          if (bentNote < pitchMin - 1 || bentNote >= pitchMax + 1) continue;
+          ctx.fillStyle = '#77d36a';
+          if (horizontal) {
+            const x = clamp(timeX(frame.receivedAt, now, width), 0, rollWidth);
+            const x2 = clamp(timeX(nextTime, now, width), 0, rollWidth);
+            const top = noteY(bentNote + 0.45, height);
+            const bottom = noteY(bentNote - 0.45, height);
+            ctx.fillRect(x, top, Math.max(1, x2 - x), Math.max(2, bottom - top));
+          } else {
+            const y = clamp(timeY(frame.receivedAt, now, height), 0, rollHeight);
+            const y2 = clamp(timeY(nextTime, now, height), 0, rollHeight);
+            const left = noteX(bentNote - 0.45, width);
+            const right = noteX(bentNote + 0.45, width);
+            ctx.fillRect(left, y, Math.max(2, right - left), Math.max(1, y2 - y));
+          }
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawLagResidual(frames, now, width, height) {
+      const horizontal = view.orientation === 'horizontal';
+      const rollWidth = horizontal ? Math.max(1, width - PIANO_WIDTH) : width;
+      const rollHeight = horizontal ? height : Math.max(1, height - PIANO_HEIGHT);
+      const previousByNote = new Map();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, rollWidth, rollHeight);
+      ctx.clip();
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      for (const frame of frames) {
+        if (!Number.isFinite(frame.lagResidual)) {
+          previousByNote.clear();
+          continue;
+        }
+        const activeNotes = new Set(frame.notes || []);
+        for (const note of previousByNote.keys()) {
+          if (!activeNotes.has(note)) previousByNote.delete(note);
+        }
+        for (const note of activeNotes) {
+          const targetMidi = Number(note) + Number(frame.pitchBend || 0);
+          const visibleResidual = clamp(frame.lagResidual, -0.42, 0.42);
+          const estimatedMidi = targetMidi + visibleResidual;
+          const point = horizontal
+            ? {
+                x: timeX(frame.receivedAt, now, width),
+                y: noteY(estimatedMidi, height),
+                time: frame.receivedAt,
+              }
+            : {
+                x: noteX(estimatedMidi, width),
+                y: timeY(frame.receivedAt, now, height),
+                time: frame.receivedAt,
+              };
+          const previous = previousByNote.get(note);
+          if (previous && point.time - previous.time <= 0.08) {
+            ctx.strokeStyle = '#2f6fed';
+            ctx.beginPath();
+            ctx.moveTo(previous.x, previous.y);
+            ctx.lineTo(point.x, point.y);
+            ctx.stroke();
+          }
+          if (point.x >= 0 && point.x <= rollWidth &&
+              point.y >= 0 && point.y <= rollHeight) {
+            ctx.fillStyle = '#2f6fed';
+            ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+          }
+          previousByNote.set(note, point);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawContour(frames, now, width, height, valueForFrame, styleForFrame) {
+      const horizontal = view.orientation === 'horizontal';
+      const rollWidth = horizontal ? Math.max(1, width - PIANO_WIDTH) : width;
+      const rollHeight = horizontal ? height : Math.max(1, height - PIANO_HEIGHT);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, rollWidth, rollHeight);
+      ctx.clip();
+      let previous = null;
+      for (const frame of frames) {
+        const midi = valueForFrame(frame);
+        const valid = Number.isFinite(midi) && midi > 0;
+        if (!valid) {
+          previous = null;
+          continue;
+        }
+
+        const point = horizontal
+          ? { midi, time: frame.receivedAt, x: timeX(frame.receivedAt, now, width), y: noteY(midi, height) }
+          : { midi, time: frame.receivedAt, x: noteX(midi, width), y: timeY(frame.receivedAt, now, height) };
+        const style = styleForFrame(frame);
+        if (previous && point.time - previous.time <= 0.16) {
+          ctx.strokeStyle = style.color;
+          ctx.lineWidth = style.width;
+          ctx.beginPath();
+          ctx.moveTo(previous.x, previous.y);
+          ctx.lineTo(point.x, point.y);
+          ctx.stroke();
+        }
+        if (point.x >= 0 && point.x <= rollWidth && point.y >= 0 && point.y <= rollHeight) {
+          ctx.fillStyle = style.color;
+          ctx.fillRect(point.x - style.width / 2, point.y - style.point / 2, style.width, style.point);
+        }
+        previous = point;
+      }
+      ctx.lineWidth = 1;
+      ctx.restore();
+    }
+
+    function drawPiano(width, height) {
+      const horizontal = view.orientation === 'horizontal';
+      const rollWidth = horizontal ? Math.max(1, width - PIANO_WIDTH) : width;
+      const rollHeight = horizontal ? height : Math.max(1, height - PIANO_HEIGHT);
+      const pitchMin = visiblePitchMin();
+      const pitchMax = visiblePitchMax();
+      const firstNote = Math.max(LOWEST_PITCH, Math.floor(pitchMin));
+      const lastNote = Math.min(HIGHEST_PITCH, Math.ceil(pitchMax));
+      const bend = Number(state && state.pitchBend || 0);
+      const sounding = new Set(((state && state.notes) || []).map((note) => Math.round(Number(note) + bend)));
+
+      ctx.fillStyle = '#d8d4c8';
+      if (horizontal) ctx.fillRect(rollWidth, 0, PIANO_WIDTH, height);
+      else ctx.fillRect(0, rollHeight, width, PIANO_HEIGHT);
+      for (let note = firstNote; note < lastNote; note += 1) {
+        const pitchClass = ((note % 12) + 12) % 12;
+        const black = [1, 3, 6, 8, 10].includes(pitchClass);
+        const active = sounding.has(note);
+        const keyLabel = computerKeyboardLabels.get(note);
+        ctx.fillStyle = active ? '#76a7ff' : black ? '#31332d' : '#d8d4c8';
+        ctx.strokeStyle = 'rgba(0,0,0,0.24)';
+        if (horizontal) {
+          const y = noteY(note + 1, height);
+          const y2 = noteY(note, height);
+          const top = clamp(y, 0, height);
+          const bottom = clamp(y2, 0, height);
+          ctx.fillRect(rollWidth + 1, top, PIANO_WIDTH - 1, Math.max(1, bottom - top));
+          ctx.beginPath();
+          ctx.moveTo(rollWidth, top);
+          ctx.lineTo(width, top);
+          ctx.stroke();
+          if (pitchClass === 0 && bottom - top >= 3) {
+            ctx.fillStyle = '#151613';
+            ctx.font = '600 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`C${Math.floor(note / 12) - 1}`, rollWidth + 7, clamp((y + y2) / 2, 7, height - 7));
+          }
+          if (keyLabel && bottom - top >= 6) {
+            ctx.fillStyle = active || black ? '#f2f0e8' : '#151613';
+            ctx.font = `700 ${clamp(Math.floor((bottom - top) * 0.62), 6, 10)}px ui-sans-serif, system-ui, sans-serif`;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(keyLabel, width - 5, clamp((top + bottom) / 2, 5, height - 5));
+          }
+        } else {
+          const left = clamp(noteX(note, width), 0, width);
+          const right = clamp(noteX(note + 1, width), 0, width);
+          ctx.fillRect(left, rollHeight + 1, Math.max(1, right - left), PIANO_HEIGHT - 1);
+          ctx.beginPath();
+          ctx.moveTo(left, rollHeight);
+          ctx.lineTo(left, height);
+          ctx.stroke();
+          if (pitchClass === 0 && right - left >= 13) {
+            ctx.fillStyle = '#151613';
+            ctx.font = '600 10px ui-sans-serif, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(`C${Math.floor(note / 12) - 1}`, (left + right) / 2, height - 6);
+          }
+          if (keyLabel && right - left >= 4) {
+            ctx.fillStyle = active || black ? '#f2f0e8' : '#151613';
+            ctx.font = `700 ${clamp(Math.floor((right - left) * 0.58), 5, 10)}px ui-sans-serif, system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(keyLabel, clamp((left + right) / 2, 3, width - 3), rollHeight + 6);
+          }
+        }
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.48)';
+      if (horizontal) ctx.fillRect(rollWidth, 0, 1, height);
+      else ctx.fillRect(0, rollHeight, width, 1);
+    }
+
+    function draw() {
+      fitCanvas();
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const now = performance.now() / 1000;
+      const windowStart = now - view.seconds;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#12130f';
+      ctx.fillRect(0, 0, w, h);
+
+      drawRollGrid(w, h);
+
+      let start = history.findIndex((frame) => frame.receivedAt >= windowStart);
+      if (start < 0) start = history.length;
+      const frames = history.slice(Math.max(0, start - 1));
+      let telemetryStart = pitchTelemetryHistory.findIndex(
+        (frame) => frame.receivedAt >= windowStart,
+      );
+      if (telemetryStart < 0) telemetryStart = pitchTelemetryHistory.length;
+      const telemetryFrames = pitchTelemetryHistory.slice(
+        Math.max(0, telemetryStart - 1),
+      );
+      let observationStart = pitchObservations.findIndex(
+        (frame) => frame.receivedAt >= windowStart,
+      );
+      if (observationStart < 0) observationStart = pitchObservations.length;
+      const rawFrames = pitchObservations.slice(Math.max(0, observationStart - 1));
+      drawMidiNotes(frames, now, w, h);
+      drawLagResidual(telemetryFrames, now, w, h);
+      drawContour(
+        rawFrames.length > 0 ? rawFrames : frames,
+        now,
+        w,
+        h,
+        (frame) => Number(frame.rawMidi),
+        () => ({ color: 'rgba(245,194,87,0.52)', width: 1, point: 3 }),
+      );
+      drawContour(
+        frames,
+        now,
+        w,
+        h,
+        (frame) => frame.pitchVoiced ? Number(frame.detectedMidi) : NaN,
+        (frame) => ({
+          color: frame.pitchStable ? '#22d3c5' : 'rgba(34,211,197,0.50)',
+          width: frame.pitchStable ? 2 : 1,
+          point: 5,
+        }),
+      );
+      drawPiano(w, h);
+      updateLagMetrics(now);
+
+      const oldestAllowed = now - MAX_TIME_SPAN - 2;
+      let pruneCount = 0;
+      while (pruneCount < history.length && history[pruneCount].receivedAt < oldestAllowed) {
+        pruneCount += 1;
+      }
+      if (pruneCount > 0) history.splice(0, pruneCount);
+
+      requestAnimationFrame(draw);
+    }
+
+    function syncViewInputs() {
+      timeSpanInput.dataset.value = String(view.seconds);
+      pitchSpanInput.dataset.value = String(view.semitones);
+      timeSpanInput.textContent = `${view.seconds.toFixed(1)} s`;
+      pitchSpanInput.textContent = `${Math.round(view.semitones)} st`;
+      timeSpanInput.setAttribute('aria-valuenow', String(view.seconds));
+      pitchSpanInput.setAttribute('aria-valuenow', String(view.semitones));
+    }
+
+    function setTimeSpan(value) {
+      const rounded = Math.round(clamp(value, MIN_TIME_SPAN, MAX_TIME_SPAN) * 2) / 2;
+      view.seconds = rounded;
+      storeNumber('harmonizer.view.seconds', rounded);
+      syncViewInputs();
+    }
+
+    function setPitchSpan(value) {
+      const rounded = Math.round(clamp(value, MIN_PITCH_SPAN, MAX_PITCH_SPAN));
+      view.semitones = rounded;
+      view.centerMidi = clampViewCenter(view.centerMidi, rounded);
+      storeNumber('harmonizer.view.semitones', rounded);
+      storeNumber('harmonizer.view.centerMidi', view.centerMidi);
+      syncViewInputs();
+    }
+
+    function setPitchCenter(value, persist = true) {
+      view.centerMidi = clampViewCenter(value);
+      if (persist) storeNumber('harmonizer.view.centerMidi', view.centerMidi);
+    }
+
+    function bindDragNumber(input, config) {
+      let drag = null;
+      input.setAttribute('aria-valuemin', String(config.min));
+      input.setAttribute('aria-valuemax', String(config.max));
+
+      input.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        drag = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startValue: config.value(),
+        };
+        input.setPointerCapture(event.pointerId);
+      });
+      input.addEventListener('pointermove', (event) => {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        const axisDelta = ((event.clientX - drag.startX) - (event.clientY - drag.startY)) / Math.SQRT2;
+        const accelerated = event.shiftKey ? 5 : event.altKey ? 0.2 : 1;
+        const steps = Math.round(axisDelta / config.pixelsPerStep * accelerated);
+        config.onChange(drag.startValue + steps * config.step);
+      });
+
+      function finishDrag(event) {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        if (input.hasPointerCapture(event.pointerId)) input.releasePointerCapture(event.pointerId);
+        drag = null;
+      }
+
+      input.addEventListener('pointerup', finishDrag);
+      input.addEventListener('pointercancel', finishDrag);
+      input.addEventListener('keydown', (event) => {
+        const direction = ['ArrowUp', 'ArrowRight'].includes(event.key)
+          ? 1
+          : ['ArrowDown', 'ArrowLeft'].includes(event.key) ? -1 : 0;
+        if (direction !== 0) {
+          event.preventDefault();
+          config.onChange(config.value() + direction * config.step);
+        }
+      });
+    }
+
+    function pointerInPiano(event) {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      return view.orientation === 'horizontal' ? x >= rect.width - PIANO_WIDTH : y >= rect.height - PIANO_HEIGHT;
+    }
+
+    function updatePianoCursor(event) {
+      canvas.style.cursor = pointerInPiano(event)
+        ? view.orientation === 'horizontal' ? 'ns-resize' : 'ew-resize'
+        : 'default';
+    }
+
+    canvas.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !pointerInPiano(event)) return;
+      event.preventDefault();
+      pianoDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startCenter: view.centerMidi,
+        semitones: view.semitones,
+        orientation: view.orientation,
+      };
+      canvas.setPointerCapture(event.pointerId);
+      canvas.classList.add('panning');
+      canvas.style.cursor = view.orientation === 'horizontal' ? 'ns-resize' : 'ew-resize';
+    });
+
+    canvas.addEventListener('pointermove', (event) => {
+      if (!pianoDrag || event.pointerId !== pianoDrag.pointerId) {
+        updatePianoCursor(event);
+        return;
+      }
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const semitoneDelta = pianoDrag.orientation === 'horizontal'
+        ? (event.clientY - pianoDrag.startY) * pianoDrag.semitones / Math.max(1, rect.height)
+        : -(event.clientX - pianoDrag.startX) * pianoDrag.semitones / Math.max(1, rect.width);
+      setPitchCenter(pianoDrag.startCenter + semitoneDelta, false);
+    });
+
+    function finishPianoDrag(event) {
+      if (!pianoDrag || event.pointerId !== pianoDrag.pointerId) return;
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      pianoDrag = null;
+      canvas.classList.remove('panning');
+      storeNumber('harmonizer.view.centerMidi', view.centerMidi);
+      updatePianoCursor(event);
+    }
+
+    canvas.addEventListener('pointerup', finishPianoDrag);
+    canvas.addEventListener('pointercancel', finishPianoDrag);
+    canvas.addEventListener('pointerleave', () => {
+      if (!pianoDrag) canvas.style.cursor = 'default';
+    });
+
+    function controlValue(id) {
+      return Number(controls[id].dataset.value);
+    }
+
+    function setControl(id, rawValue, persist = true) {
+      const config = controlConfigs[id];
+      const numeric = Number(rawValue);
+      const fallback = Number.isFinite(numeric) ? numeric : config.start;
+      const steps = Math.round((fallback - config.min) / config.step);
+      const value = clamp(config.min + steps * config.step, config.min, config.max);
+      controls[id].dataset.value = String(value);
+      controls[id].textContent = config.format(value);
+      controls[id].setAttribute('aria-valuenow', String(value));
+      if (id === 'keyboardOctave') rebuildComputerKeyboardMap(value);
+      if (persist) {
+        savedControlValues[id] = value;
+        storeSetting(id, value);
+      }
+    }
+
+    function restoreSavedControlValues() {
+      for (const [id, value] of Object.entries(savedControlValues)) {
+        if (value != null) setControl(id, value, false);
+      }
+      if (savedUnvoicedMode) setUnvoicedMode(savedUnvoicedMode, false, false);
+    }
+
+    function setAudioLevel(fill, label, linear) {
+      const peak = Math.max(0, Number(linear) || 0);
+      const db = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+      const percent = Number.isFinite(db) ? clamp((db + 60) / 60, 0, 1) * 100 : 0;
+      fill.style.width = `${percent}%`;
+      label.textContent = Number.isFinite(db) ? `${db.toFixed(0)} dB` : '-inf';
+    }
+
+    function applyState(next) {
+      const previousBackend = state && state.backendKey;
+      const previousServerInstance = state && state.serverInstance;
+      const receivedAt = performance.now() / 1000;
+      const serverRestarted = Boolean(
+        previousServerInstance && next.serverInstance &&
+        previousServerInstance !== next.serverInstance
+      );
+      let shouldRestoreControls = serverRestarted;
+      let shouldReloadAudioMenus = false;
+      if (serverRestarted ||
+          (previousBackend && next.backendKey && previousBackend !== next.backendKey)) {
+        history.length = 0;
+        resetPitchTelemetry(String(next.serverInstance || ''));
+      }
+      state = next;
+      history.push({ ...next, receivedAt });
+      if (history.length > 6000) history.splice(0, history.length - 6000);
+      ingestPitchTelemetry(next, receivedAt);
+
+      const stableMidi = Number(next.detectedMidi);
+      const rawMidi = Number(next.rawMidi);
+      const correctionMidi = Number(next.correctionMidi);
+      const rms = Number(next.pitchRms || 0);
+      const gate = Number(next.gate || 0);
+      const displayMidi = stableMidi > 0 ? stableMidi : rawMidi > 0 ? rawMidi : null;
+      const rounded = displayMidi == null ? null : Math.round(displayMidi);
+      const pitchLabel = stableMidi > 0 && next.pitchStable ? 'pitch' : stableMidi > 0 && next.pitchVoiced ? 'held' : rawMidi > 0 ? 'raw' : 'pitch';
+      pitchChip.textContent = rounded == null ? 'pitch --' : `${pitchLabel} ${midiName(rounded)} ${displayMidi.toFixed(1)}`;
+      pitchChip.classList.toggle('good', Boolean(next.pitchStable));
+      midiChip.textContent = `notes ${(next.notes || []).length}`;
+      rmsText.textContent = `rms ${rms.toFixed(4)}`;
+      stableText.textContent = next.unvoicedActive
+        ? next.unvoicedMode === 'tc-bypass' ? 'articulation bypass' : 'ratio held'
+        : next.pitchStable ? 'stable' : next.pitchVoiced ? 'holding' : rawMidi > 0 ? 'raw pitch' : rms > 0 && rms < gate ? 'below gate' : 'listening';
+      setAudioLevel(inputLevelFill, inputLevelText, next.inputPeak);
+      setAudioLevel(outputLevelFill, outputLevelText, next.outputPeak);
+      const routeStage = String(next.audioRouteStage || '');
+      const routeFailed = next.audioRouteStatus === 'error';
+      const inputRouteFailed = routeFailed && routeStage.includes('input');
+      const outputRouteFailed = routeFailed && routeStage.includes('output');
+      audioInputValue.textContent = inputRouteFailed ? 'failed' : next.audioReady ? 'ready' : 'error';
+      audioOutputValue.textContent = outputRouteFailed ? 'failed' : next.audioReady ? 'ready' : 'error';
+      audioInputValue.title = inputRouteFailed ? String(next.audioError || '') : '';
+      audioOutputValue.title = outputRouteFailed ? String(next.audioError || '') : '';
+      testToneBtn.textContent = next.testTone ? 'playing' : 'test output';
+      freezeTriggers.forEach((button, index) => {
+        const active = Boolean((next.freezeActive || [])[index] ||
+                               (next.freezeHold || [])[index]);
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      if (next.backendKey && backend.querySelector(`option[value="${next.backendKey}"]`)) {
+        backend.value = next.backendKey;
+      }
+      const supportsUnvoicedModes = next.backendKey === 'live512' || next.backendKey === 'parallel';
+      unvoicedGroup.classList.toggle('is-disabled', !supportsUnvoicedModes);
+      unvoicedGroup.setAttribute('aria-disabled', String(!supportsUnvoicedModes));
+      unvoicedGroup.title = supportsUnvoicedModes
+        ? ''
+        : 'Unvoiced comparison modes are implemented in Rubber Band Live 512.';
+      tcBypassMode.disabled = !supportsUnvoicedModes;
+      holdRatioMode.disabled = !supportsUnvoicedModes;
+      const supportsParallelBlend = next.backendKey === 'parallel';
+      immediacyControl.classList.toggle('is-disabled', !supportsParallelBlend);
+      immediacyControl.title = supportsParallelBlend
+        ? 'Sets the R2 onset contribution; it yields to Live512 after the quality path arrives.'
+        : 'Immediacy is available in the Parallel R2 + Live 512 backend.';
+      controls.immediacy.disabled = !supportsParallelBlend;
+      if (pendingBackend && next.backendKey === pendingBackend) {
+        pendingBackend = '';
+        window.clearTimeout(backendSwitchTimer);
+        backend.disabled = false;
+        backendValue.textContent = 'active';
+        storeSetting('backend', next.backendKey);
+        shouldRestoreControls = true;
+        shouldReloadAudioMenus = true;
+      } else if (!pendingBackend) {
+        backend.disabled = false;
+        backendValue.textContent = 'active';
+        if (serverRestarted) {
+          // A different tab may have initiated the restart. Adopt the active
+          // server backend so reconnecting clients cannot fight over it.
+          storeSetting('backend', next.backendKey);
+        }
+      }
+      if (next.audioInputDevice != null && audioInput.options.length > 0) {
+        audioInput.value = String(next.audioInputDevice);
+        if (audioInput.selectedOptions[0]) storeSetting('audioInputName', audioInput.selectedOptions[0].textContent);
+      }
+      if (next.audioOutputDevice != null && audioOutput.options.length > 0) {
+        audioOutput.value = String(next.audioOutputDevice);
+        if (audioOutput.selectedOptions[0]) storeSetting('audioOutputName', audioOutput.selectedOptions[0].textContent);
+      }
+      meter.textContent = [
+        next.audioReady ? 'audio ready' : `audio ${next.audioError || 'not ready'}`,
+        next.audioReady && routeFailed && next.audioError ? `route error ${next.audioError}` : null,
+        next.audioInput ? `in ${next.audioInput}` : 'in unknown',
+        next.audioOutput ? `out ${next.audioOutput}` : 'out unknown',
+        `levels in ${inputLevelText.textContent} out ${outputLevelText.textContent}`,
+        `xruns in ${Number(next.inputOverflows || 0)} out ${Number(next.outputUnderflows || 0)}`,
+        Number(next.bridgeTargetFrames) > 0
+          ? `bridge ${Number(next.bridgeFillFrames || 0).toFixed(1)} raw ` +
+            `${Number(next.bridgeFilteredFillFrames || 0).toFixed(1)} filtered / ${Number(next.bridgeTargetFrames).toFixed(0)} frames ` +
+            `range ${Number(next.bridgeMinFrames || 0).toFixed(0)}..${Number(next.bridgeMaxFrames || 0).toFixed(0)} ` +
+            `${Number(next.bridgeRatePpm || 0) >= 0 ? '+' : ''}${Number(next.bridgeRatePpm || 0).toFixed(0)} ppm`
+          : null,
+        `callback max in ${Number(next.inputCallbackMaxMs || 0).toFixed(2)} ms ` +
+          `out ${Number(next.outputCallbackMaxMs || 0).toFixed(2)} ms ` +
+          `DSP block ${Number(next.dspBlockMaxMs || 0).toFixed(2)} ms`,
+        `DSP worker queue ${Number(next.dspQueueFrames || 0)} frames ` +
+          `(max ${Number(next.dspQueueMaxFrames || 0)}) batch max ` +
+          `${Number(next.dspWorkerBatchMaxMs || 0).toFixed(2)} ms ` +
+          `detector max ${Number(next.pitchDetectorMaxMs || 0).toFixed(2)} ms`,
+        `device reported in ${Number(next.audioInputLatencyMs || 0).toFixed(1)} ms ` +
+          `out ${Number(next.audioOutputLatencyMs || 0).toFixed(1)} ms`,
+        next.dspBackend
+          ? `engine ${next.dspBackend} DSP path ${Number(next.dspLatencyMs || 0).toFixed(1)} ms`
+          : 'engine unknown',
+        Number(next.earlyPathLatencyMs) > 0 && Number(next.qualityPathLatencyMs) > 0
+          ? `DSP paths early ${Number(next.earlyPathLatencyMs).toFixed(1)} ms / quality ${Number(next.qualityPathLatencyMs).toFixed(1)} ms`
+          : null,
+        browserMidiStatus,
+        next.pitchStable ? 'voice stable' : next.pitchVoiced ? 'voice held' : 'voice off',
+        rawMidi > 0 ? `raw ${midiName(Math.round(rawMidi))} ${rawMidi.toFixed(1)}` : 'raw --',
+        correctionMidi > 0 ? `correction ${midiName(Math.round(correctionMidi))} ${correctionMidi.toFixed(2)}` : 'correction --',
+        next.backendKey === 'parallel'
+          ? `predictor ${next.predictorVoiced ? 'voiced' : 'off'} ${Math.round(Number(next.predictorConfidence || 0) * 100)}% slope ${Number(next.pitchSlope || 0).toFixed(2)} st/s`
+          : null,
+        next.backendKey === 'parallel'
+          ? `projected early ${Number(next.predictedEarlyMidi) > 0 ? Number(next.predictedEarlyMidi).toFixed(2) : '--'} / quality model ${Number(next.predictedQualityMidi) > 0 ? Number(next.predictedQualityMidi).toFixed(2) : '--'}`
+          : null,
+        next.backendKey === 'parallel'
+          ? `handoff ${Math.round(Number(next.parallelHandoff || 0) * 100)}%`
+          : null,
+        `blend ${Math.round(Number(next.mix || 0) * 100)}% wet`,
+        `immediacy ${Math.round(Number(next.immediacy || 0) * 100)}% onset`,
+        `wet/dry ${Number(next.wet).toFixed(2)} / ${Number(next.dry).toFixed(2)}`,
+        `monitor gain +${Number(next.gainDb || 0).toFixed(0)} dB`,
+        `gate ${Number(next.gate).toFixed(4)}`,
+        `window ${Number(next.stableWindow).toFixed(2)} st`,
+        `glide ${Math.round(Number(next.glideAmount || 0) * 100)}% / ${Math.round(Number(next.glideTimeMs || 0))} ms`,
+        `fx chorus ${Math.round(Number(next.chorusMix || 0) * 100)}% reverb ${Math.round(Number(next.reverbMix || 0) * 100)}%`,
+        `freeze ${(next.freezeActive || []).map((active, index) => active ? index + 1 : null).filter(Boolean).join('+') || 'off'}`,
+        `unvoiced ${next.unvoicedMode || 'tc-bypass'}${next.unvoicedActive ? ' active' : ''}`,
+        `sibilance score ${Number(next.sibilanceScore || 0).toFixed(2)}`,
+      ].filter(Boolean).join('\n');
+
+      if (!controlsInitialized) {
+        applyingRemote = true;
+        setControl('mix', next.mix, false);
+        setControl('immediacy', next.immediacy, false);
+        setControl('gain', next.gainDb, false);
+        setControl('gate', next.gate, false);
+        setControl('stable', next.stableWindow, false);
+        setControl('glideAmount', next.glideAmount, false);
+        setControl('glideTimeMs', next.glideTimeMs, false);
+        setControl('chorusMix', next.chorusMix, false);
+        setControl('reverbMix', next.reverbMix, false);
+        setControl('freezeTone', next.freezeTone, false);
+        for (let layer = 1; layer <= 3; layer += 1) {
+          setControl(`freeze${layer}Level`,
+            next[`freeze${layer}Level`] ?? (next.freezeLevel || [])[layer - 1], false);
+          setControl(`freeze${layer}Transpose`,
+            next[`freeze${layer}Transpose`] ?? (next.freezeTranspose || [])[layer - 1], false);
+        }
+        setUnvoicedMode(next.unvoicedMode, false, false);
+        applyingRemote = false;
+      }
+
+      if (controlsInitialized && shouldRestoreControls) {
+        restoreSavedControlValues();
+        queueMicrotask(() => {
+          pushControls().catch(() => {});
+          if (shouldReloadAudioMenus) {
+            loadAudioInputs().catch(() => { audioInputValue.textContent = 'error'; });
+            loadAudioOutputs().catch(() => { audioOutputValue.textContent = 'error'; });
+          }
+        });
+      }
+
+      const capturing = Boolean(next.capturing);
+      captureBtn.textContent = capturing
+        ? `stop (${Number(next.captureSeconds || 0).toFixed(0)}s)`
+        : 'record';
+      captureBtn.classList.toggle('rec', capturing);
+      captureValue.textContent = capturing
+        ? 'recording…'
+        : lastCaptureDir ? `saved ${lastCaptureDir}` : '';
+    }
+
+    captureBtn.addEventListener('click', async () => {
+      const action = state && state.capturing ? 'stop' : 'start';
+      try {
+        const response = await fetch(`/api/capture?action=${action}`);
+        const info = await response.json();
+        if (action === 'stop' && info.dir) lastCaptureDir = info.dir;
+      } catch {}
+    });
+
+    async function pushControls() {
+      const params = new URLSearchParams({
+        mix: String(controlValue('mix')),
+        immediacy: String(controlValue('immediacy')),
+        gain: String(controlValue('gain')),
+        gate: String(controlValue('gate')),
+        stable: String(controlValue('stable')),
+        glideAmount: String(controlValue('glideAmount')),
+        glideTimeMs: String(controlValue('glideTimeMs')),
+        chorusMix: String(controlValue('chorusMix')),
+        reverbMix: String(controlValue('reverbMix')),
+        freeze1Level: String(controlValue('freeze1Level')),
+        freeze1Transpose: String(controlValue('freeze1Transpose')),
+        freeze2Level: String(controlValue('freeze2Level')),
+        freeze2Transpose: String(controlValue('freeze2Transpose')),
+        freeze3Level: String(controlValue('freeze3Level')),
+        freeze3Transpose: String(controlValue('freeze3Transpose')),
+        freezeTone: String(controlValue('freezeTone')),
+        unvoiced: unvoicedMode,
+      });
+      const response = await fetch(`/api/control?${params.toString()}`);
+      applyState(await response.json());
+    }
+
+    for (const [id, input] of Object.entries(controls)) {
+      const config = controlConfigs[id];
+      const stored = Number(storedSetting(id, ''));
+      savedControlValues[id] = Number.isFinite(stored) && storedSetting(id, '') !== '' ? stored : null;
+      setControl(id, savedControlValues[id] ?? config.start, false);
+      bindDragNumber(input, {
+        ...config,
+        pixelsPerStep: config.pixelsPerStep ?? 5,
+        value: () => controlValue(id),
+        onChange: (value) => {
+          if (applyingRemote) return;
+          if (id === 'keyboardOctave') releaseComputerKeys();
+          setControl(id, value);
+          if (config.server !== false) pushControls().catch(() => {});
+        },
+      });
+    }
+
+    async function loadAudioOutputs() {
+      const response = await fetch('/api/audio-outputs');
+      const info = await response.json();
+      audioOutput.replaceChildren();
+      for (const device of info.outputs || []) {
+        const option = document.createElement('option');
+        option.value = String(device.id);
+        option.textContent = device.name;
+        audioOutput.append(option);
+      }
+      const savedName = storedSetting('audioOutputName');
+      const savedOption = [...audioOutput.options].find((option) => option.textContent === savedName);
+      audioOutput.value = savedOption ? savedOption.value : String(info.selected);
+      audioOutputValue.textContent = audioOutput.options.length > 0 ? 'ready' : 'none';
+      if (audioOutput.value && audioOutput.value !== String(info.selected)) {
+        await switchAudioOutput(audioOutput.value);
+      } else if (audioOutput.selectedOptions[0]) {
+        storeSetting('audioOutputName', audioOutput.selectedOptions[0].textContent);
+      }
+    }
+
+    async function loadAudioInputs() {
+      const response = await fetch('/api/audio-inputs');
+      const info = await response.json();
+      audioInput.replaceChildren();
+      for (const device of info.inputs || []) {
+        const option = document.createElement('option');
+        option.value = String(device.id);
+        option.textContent = device.name;
+        audioInput.append(option);
+      }
+      const savedName = storedSetting('audioInputName');
+      const savedOption = [...audioInput.options].find((option) => option.textContent === savedName);
+      audioInput.value = savedOption ? savedOption.value : String(info.selected);
+      audioInputValue.textContent = audioInput.options.length > 0 ? 'ready' : 'none';
+      if (audioInput.value && audioInput.value !== String(info.selected)) {
+        await switchAudioInput(audioInput.value);
+      } else if (audioInput.selectedOptions[0]) {
+        storeSetting('audioInputName', audioInput.selectedOptions[0].textContent);
+      }
+    }
+
+    async function switchAudioInput(device) {
+      const requestedName = audioInput.selectedOptions[0]?.textContent || 'audio input';
+      audioInput.disabled = true;
+      audioInputValue.textContent = 'opening';
+      audioInputValue.title = `Opening ${requestedName}`;
+      try {
+        const params = new URLSearchParams({ device });
+        const response = await fetch(`/api/audio-input?${params.toString()}`);
+        const next = await response.json();
+        applyState(next);
+        if (!response.ok || String(next.audioInputDevice) !== String(device)) {
+          throw new Error(next.audioError || `Could not open ${requestedName}`);
+        }
+        storeSetting('audioInputName', requestedName);
+      } catch (error) {
+        if (state?.audioInputDevice != null) audioInput.value = String(state.audioInputDevice);
+        audioInputValue.textContent = 'failed';
+        audioInputValue.title = error instanceof Error ? error.message : String(error);
+      } finally {
+        audioInput.disabled = false;
+      }
+    }
+
+    audioInput.addEventListener('change', async () => {
+      await switchAudioInput(audioInput.value);
+    });
+
+    async function switchAudioOutput(device) {
+      const requestedName = audioOutput.selectedOptions[0]?.textContent || 'audio output';
+      audioOutput.disabled = true;
+      audioOutputValue.textContent = 'opening';
+      audioOutputValue.title = `Opening ${requestedName}`;
+      try {
+        const params = new URLSearchParams({ device });
+        const response = await fetch(`/api/audio-output?${params.toString()}`);
+        const next = await response.json();
+        applyState(next);
+        if (!response.ok || String(next.audioOutputDevice) !== String(device)) {
+          throw new Error(next.audioError || `Could not open ${requestedName}`);
+        }
+        storeSetting('audioOutputName', requestedName);
+      } catch (error) {
+        if (state?.audioOutputDevice != null) audioOutput.value = String(state.audioOutputDevice);
+        audioOutputValue.textContent = 'failed';
+        audioOutputValue.title = error instanceof Error ? error.message : String(error);
+      } finally {
+        audioOutput.disabled = false;
+      }
+    }
+
+    audioOutput.addEventListener('change', async () => {
+      await switchAudioOutput(audioOutput.value);
+    });
+
+    async function loadBackends() {
+      const response = await fetch('/api/backends');
+      const info = await response.json();
+      backend.replaceChildren();
+      for (const item of info.backends || []) {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.available ? item.name : `${item.name} (not built)`;
+        option.disabled = !item.available;
+        backend.append(option);
+      }
+      backend.value = info.selected;
+      backendValue.textContent = 'active';
+      return info;
+    }
+
+    async function switchBackend(key, persist = true) {
+      if (!key || key === (state && state.backendKey)) {
+        backendValue.textContent = 'active';
+        return;
+      }
+      const previous = state && state.backendKey;
+      for (const id of Object.keys(savedControlValues)) {
+        savedControlValues[id] = controlValue(id);
+      }
+      pendingBackend = key;
+      backend.disabled = true;
+      backendValue.textContent = 'switching';
+      linkChip.textContent = 'switching';
+      linkChip.classList.remove('good');
+      if (persist) storeSetting('backend', key);
+      try {
+        const params = new URLSearchParams({
+          name: key,
+          instance: state && state.serverInstance ? state.serverInstance : '',
+        });
+        const response = await fetch(`/api/backend?${params.toString()}`);
+        const info = await response.json();
+        if (!response.ok || !info.ok) throw new Error(info.error || 'switch-failed');
+        backendSwitchTimer = window.setTimeout(() => {
+          if (!pendingBackend) return;
+          pendingBackend = '';
+          backend.disabled = false;
+          backendValue.textContent = 'failed';
+        }, 15000);
+      } catch {
+        pendingBackend = '';
+        backend.disabled = false;
+        backendValue.textContent = 'error';
+        if (previous) backend.value = previous;
+      }
+    }
+
+    backend.addEventListener('change', async () => {
+      await switchBackend(backend.value);
+    });
+
+    testToneBtn.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/test-tone');
+        applyState(await response.json());
+      } catch {}
+    });
+
+    async function loadInitialState() {
+      const response = await fetch('/api/state');
+      applyState(await response.json());
+    }
+
+    function cleanStatus(text) {
+      return String(text || '').replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 96);
+    }
+
+    function sendMidi(params) {
+      fetch(`/api/midi?${params.toString()}`).catch(() => {});
+    }
+
+    function sendNoteEvent(eventName, note) {
+      const params = new URLSearchParams({
+        event: eventName,
+        note: String(note),
+      });
+      sendMidi(params);
+    }
+
+    function isControlTarget(target) {
+      return target instanceof Element && Boolean(
+        target.closest('input, select, button, textarea, [contenteditable="true"]'),
+      );
+    }
+
+    function handleComputerKeyDown(event) {
+      const note = computerKeyboardNotes.get(event.code);
+      if (note == null || event.repeat || heldComputerKeys.has(event.code)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || isControlTarget(event.target)) return;
+      event.preventDefault();
+      heldComputerKeys.set(event.code, note);
+      sendNoteEvent('on', note);
+    }
+
+    function handleComputerKeyUp(event) {
+      const note = heldComputerKeys.get(event.code);
+      if (note == null) return;
+      event.preventDefault();
+      heldComputerKeys.delete(event.code);
+      sendNoteEvent('off', note);
+    }
+
+    function releaseComputerKeys() {
+      for (const note of heldComputerKeys.values()) sendNoteEvent('off', note);
+      heldComputerKeys.clear();
+    }
+
+    window.addEventListener('keydown', handleComputerKeyDown);
+    window.addEventListener('keyup', handleComputerKeyUp);
+    window.addEventListener('blur', releaseComputerKeys);
+    window.addEventListener('pagehide', releaseComputerKeys);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) releaseComputerKeys();
+    });
+
+    function updateMidiStatus(ready, error) {
+      browserMidiStatus = ready ? 'midi + keys ready' : 'keys ready';
+      const params = new URLSearchParams({
+        ready: ready ? '1' : '0',
+        error: cleanStatus(error || ''),
+      });
+      fetch(`/api/midi-status?${params.toString()}`).catch(() => {});
+    }
+
+    function handleMidiMessage(event) {
+      const [status, data1, data2] = event.data;
+      const command = status & 0xf0;
+      const params = new URLSearchParams();
+
+      if (command === 0x90 && data2 > 0) {
+        params.set('event', 'on');
+        params.set('note', String(data1));
+        sendMidi(params);
+      } else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
+        params.set('event', 'off');
+        params.set('note', String(data1));
+        sendMidi(params);
+      } else if (command === 0xb0) {
+        params.set('event', 'cc');
+        params.set('cc', String(data1));
+        params.set('value', String(data2));
+        sendMidi(params);
+      } else if (command === 0xe0) {
+        const raw = (data2 << 7) | data1;
+        const semitones = ((raw - 8192) / 8192) * 2;
+        params.set('event', 'bend');
+        params.set('semitones', semitones.toFixed(4));
+        sendMidi(params);
+      }
+    }
+
+    function attachMidiInputs(access) {
+      const inputs = [...access.inputs.values()];
+      const savedId = storedSetting('midiInput', 'all');
+      const savedName = storedSetting('midiInputName');
+      midiInput.replaceChildren();
+      for (const [value, label] of [['all', 'All MIDI devices'], ['none', 'None']]) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        midiInput.append(option);
+      }
+      for (const input of inputs) {
+        const option = document.createElement('option');
+        option.value = input.id;
+        option.textContent = input.name || input.manufacturer || 'MIDI input';
+        midiInput.append(option);
+      }
+      const savedOption = [...midiInput.options].find((option) => option.value === savedId)
+        || [...midiInput.options].find((option) => option.textContent === savedName);
+      midiInput.value = savedOption ? savedOption.value : 'all';
+
+      let count = 0;
+      for (const input of inputs) {
+        const enabled = midiInput.value === 'all' || midiInput.value === input.id;
+        input.onmidimessage = enabled ? handleMidiMessage : null;
+        if (enabled) count += 1;
+      }
+      midiInputValue.textContent = midiInput.value === 'none'
+        ? 'off'
+        : count > 0 ? `${count} active` : 'none';
+      updateMidiStatus(count > 0, count > 0 || midiInput.value === 'none' ? '' : 'no-inputs');
+    }
+
+    midiInput.addEventListener('change', () => {
+      storeSetting('midiInput', midiInput.value);
+      if (midiInput.selectedOptions[0]) storeSetting('midiInputName', midiInput.selectedOptions[0].textContent);
+      if (midiAccess) attachMidiInputs(midiAccess);
+    });
+
+    async function initBrowserMidi() {
+      if (!navigator.requestMIDIAccess) {
+        updateMidiStatus(false, 'web-midi-unavailable');
+        return;
+      }
+      try {
+        midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+        attachMidiInputs(midiAccess);
+        midiAccess.onstatechange = () => attachMidiInputs(midiAccess);
+      } catch (error) {
+        midiInputValue.textContent = 'denied';
+        updateMidiStatus(false, 'web-midi-denied');
+      }
+    }
+
+    function connectEvents() {
+      const source = new EventSource('/events');
+      source.addEventListener('open', () => {
+        linkChip.textContent = 'live';
+        linkChip.classList.add('good');
+      });
+      source.addEventListener('error', () => {
+        linkChip.textContent = pendingBackend ? 'switching' : 'reconnecting';
+        linkChip.classList.remove('good');
+      });
+      source.addEventListener('state', (event) => {
+        applyState(JSON.parse(event.data));
+      });
+    }
+
+    bindDragNumber(timeSpanInput, {
+      min: MIN_TIME_SPAN,
+      max: MAX_TIME_SPAN,
+      step: 0.5,
+      pixelsPerStep: 6,
+      value: () => view.seconds,
+      onChange: setTimeSpan,
+    });
+    bindDragNumber(pitchSpanInput, {
+      min: MIN_PITCH_SPAN,
+      max: MAX_PITCH_SPAN,
+      step: 1,
+      pixelsPerStep: 4,
+      value: () => view.semitones,
+      onChange: setPitchSpan,
+    });
+    function syncPillThumb(groupEl, activeButton) {
+      if (!groupEl || !activeButton) return;
+      const thumb = groupEl.querySelector('.pill-thumb');
+      if (!thumb) return;
+      const inset = 4;
+      const left = activeButton.offsetLeft - inset;
+      const top = activeButton.offsetTop - inset;
+      const thumbRadius = activeButton.offsetHeight / 2;
+      thumb.style.width = `${activeButton.offsetWidth}px`;
+      thumb.style.height = `${activeButton.offsetHeight}px`;
+      thumb.style.borderRadius = `${thumbRadius}px`;
+      thumb.style.transform = `translate(${left}px, ${top}px)`;
+      groupEl.style.borderRadius = `${thumbRadius + inset}px`;
+    }
+
+    function animatePillGroup(groupEl, updateFn) {
+      groupEl.classList.add('is-animating');
+      updateFn();
+      window.setTimeout(() => groupEl.classList.remove('is-animating'), 220);
+    }
+
+    function setOrientation(orientation, persist = true, animate = true) {
+      const update = () => {
+        view.orientation = orientation === 'vertical' ? 'vertical' : 'horizontal';
+        const vertical = view.orientation === 'vertical';
+        horizontalFlow.classList.toggle('is-active', !vertical);
+        verticalFlow.classList.toggle('is-active', vertical);
+        horizontalFlow.setAttribute('aria-selected', String(!vertical));
+        verticalFlow.setAttribute('aria-selected', String(vertical));
+        syncPillThumb(orientationGroup, vertical ? verticalFlow : horizontalFlow);
+      };
+      if (animate) animatePillGroup(orientationGroup, update);
+      else update();
+      if (persist) storeSetting('orientation', view.orientation);
+      canvas.title = view.orientation === 'horizontal'
+        ? 'Drag the right piano vertically to change the visible pitch range.'
+        : 'Drag the bottom piano horizontally to change the visible pitch range.';
+      canvas.style.cursor = 'default';
+    }
+    function setUnvoicedMode(mode, persist = true, animate = true) {
+      const update = () => {
+        unvoicedMode = mode === 'hold-ratio' ? 'hold-ratio' : 'tc-bypass';
+        const hold = unvoicedMode === 'hold-ratio';
+        tcBypassMode.classList.toggle('is-active', !hold);
+        holdRatioMode.classList.toggle('is-active', hold);
+        tcBypassMode.setAttribute('aria-selected', String(!hold));
+        holdRatioMode.setAttribute('aria-selected', String(hold));
+        syncPillThumb(unvoicedGroup, hold ? holdRatioMode : tcBypassMode);
+      };
+      if (animate) animatePillGroup(unvoicedGroup, update);
+      else update();
+      if (persist) {
+        savedUnvoicedMode = unvoicedMode;
+        storeSetting('unvoicedMode', unvoicedMode);
+      }
+    }
+    function setFreezeMode(mode, persist = true, animate = true) {
+      const update = () => {
+        freezeMode = mode === 'momentary' ? 'momentary' : 'latch';
+        const momentary = freezeMode === 'momentary';
+        freezeLatchMode.classList.toggle('is-active', !momentary);
+        freezeMomentaryMode.classList.toggle('is-active', momentary);
+        freezeLatchMode.setAttribute('aria-selected', String(!momentary));
+        freezeMomentaryMode.setAttribute('aria-selected', String(momentary));
+        syncPillThumb(freezeModeGroup, momentary ? freezeMomentaryMode : freezeLatchMode);
+      };
+      if (animate) animatePillGroup(freezeModeGroup, update);
+      else update();
+      if (persist) storeSetting('freezeMode', freezeMode);
+    }
+    async function sendFreeze(slot, action) {
+      const params = new URLSearchParams({ slot: String(slot), action });
+      const response = await fetch(`/api/freeze?${params.toString()}`);
+      if (response.ok) applyState(await response.json());
+    }
+    freezeTriggers.forEach((button, slot) => {
+      let pointerHeld = false;
+      let keyboardHeld = false;
+      button.addEventListener('click', (event) => {
+        if (freezeMode !== 'latch') {
+          event.preventDefault();
+          return;
+        }
+        sendFreeze(slot, 'toggle').catch(() => {});
+      });
+      button.addEventListener('pointerdown', (event) => {
+        if (freezeMode !== 'momentary' || event.button !== 0) return;
+        event.preventDefault();
+        pointerHeld = true;
+        button.setPointerCapture(event.pointerId);
+        sendFreeze(slot, 'on').catch(() => {});
+      });
+      const releasePointerFreeze = (event) => {
+        if (!pointerHeld) return;
+        pointerHeld = false;
+        if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+        sendFreeze(slot, 'off').catch(() => {});
+      };
+      button.addEventListener('pointerup', releasePointerFreeze);
+      button.addEventListener('pointercancel', releasePointerFreeze);
+      button.addEventListener('keydown', (event) => {
+        if (freezeMode !== 'momentary' || keyboardHeld ||
+            !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        keyboardHeld = true;
+        sendFreeze(slot, 'on').catch(() => {});
+      });
+      button.addEventListener('keyup', (event) => {
+        if (!keyboardHeld || !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        keyboardHeld = false;
+        sendFreeze(slot, 'off').catch(() => {});
+      });
+      button.addEventListener('blur', () => {
+        if (!keyboardHeld) return;
+        keyboardHeld = false;
+        sendFreeze(slot, 'off').catch(() => {});
+      });
+    });
+    clearFreezes.addEventListener('click', () => {
+      for (let slot = 0; slot < freezeTriggers.length; slot += 1) {
+        sendFreeze(slot, 'clear').catch(() => {});
+      }
+    });
+    horizontalFlow.addEventListener('click', () => setOrientation('horizontal'));
+    verticalFlow.addEventListener('click', () => setOrientation('vertical'));
+    tcBypassMode.addEventListener('click', () => {
+      setUnvoicedMode('tc-bypass');
+      pushControls().catch(() => {});
+    });
+    holdRatioMode.addEventListener('click', () => {
+      setUnvoicedMode('hold-ratio');
+      pushControls().catch(() => {});
+    });
+    freezeLatchMode.addEventListener('click', () => setFreezeMode('latch'));
+    freezeMomentaryMode.addEventListener('click', () => setFreezeMode('momentary'));
+    setOrientation(view.orientation, false, false);
+    setUnvoicedMode(unvoicedMode, false, false);
+    setFreezeMode(freezeMode, false, false);
+    syncViewInputs();
+    window.addEventListener('resize', () => {
+      fitCanvas();
+      syncPillThumb(orientationGroup, view.orientation === 'vertical' ? verticalFlow : horizontalFlow);
+      syncPillThumb(unvoicedGroup, unvoicedMode === 'hold-ratio' ? holdRatioMode : tcBypassMode);
+      syncPillThumb(freezeModeGroup, freezeMode === 'momentary' ? freezeMomentaryMode : freezeLatchMode);
+    });
+
+    async function initializeApp() {
+      try {
+        const response = await fetch('/api/state');
+        applyState(await response.json());
+      } catch {
+        linkChip.textContent = 'reconnecting';
+      }
+      restoreSavedControlValues();
+      controlsInitialized = true;
+      await pushControls().catch(() => {});
+      const backendInfo = await loadBackends().catch(() => null);
+      connectEvents();
+      initBrowserMidi();
+      const savedBackend = storedSetting('backend', backendInfo ? backendInfo.selected : '');
+      const savedBackendOption = [...backend.options].find(
+        (option) => option.value === savedBackend && !option.disabled
+      );
+      if (savedBackendOption && savedBackend !== (state && state.backendKey)) {
+        backend.value = savedBackend;
+        await switchBackend(savedBackend, false);
+        return;
+      }
+      await loadAudioInputs().catch(() => { audioInputValue.textContent = 'error'; });
+      await loadAudioOutputs().catch(() => { audioOutputValue.textContent = 'error'; });
+    }
+
+    initializeApp();
+    draw();
+  </script>
+</body>
+</html>

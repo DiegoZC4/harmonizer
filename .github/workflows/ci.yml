@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config \
+            portaudio19-dev libaubio-dev
+      - name: Configure
+        run: cmake --preset test
+      - name: Build
+        run: cmake --build --preset test
+      - name: Native tests
+        run: ctest --preset test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Browser pitch tests
+        run: node public/test-pitch.mjs
+      - name: Repository whitespace
+        run: git diff --check
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install native dependencies
+        run: brew install cmake ninja pkg-config portaudio aubio
+      - name: Configure
+        run: cmake --preset test
+      - name: Build
+        run: cmake --build --preset test
+      - name: Native tests
+        run: ctest --preset test
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-portaudio
+            mingw-w64-ucrt-x86_64-aubio
+      - name: Configure
+        run: cmake --preset test
+      - name: Build
+        run: cmake --build --preset test
+      - name: Native tests
+        run: ctest --preset test
+      - name: Executable smoke test
+        run: ./build/test/harmonizer_web.exe --help

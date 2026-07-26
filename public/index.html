@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151613">
+  <link rel="icon" type="image/svg+xml" href="./harmonizer.svg">
+  <title>Harmonizer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #151613;
+      --stage: #12130f;
+      --panel: #20221d;
+      --bar: #191b17;
+      --ink: #f2f0e8;
+      --muted: #a8a59a;
+      --line: rgba(242, 240, 232, 0.14);
+      --cyan: #22d3c5;
+      --green: #77d36a;
+      --gold: #d8a84e;
+      --blue: #76a7ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(540px, 1fr) 286px;
+    }
+    .stage {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 54px minmax(0, 1fr) 40px;
+      border-right: 1px solid var(--line);
+    }
+    .topbar, .statusbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      background: var(--bar);
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .statusbar {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    h1 { margin: 0 4px 0 0; font-size: 18px; font-weight: 700; }
+    .chip {
+      min-width: 78px;
+      max-width: 160px;
+      overflow: hidden;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-overflow: ellipsis;
+    }
+    .chip.good { color: var(--cyan); }
+    .command {
+      min-height: 32px;
+      padding: 5px 10px;
+      border: 1px solid var(--cyan);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--cyan);
+    }
+    #download-button { margin-left: auto; }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: var(--stage);
+      touch-action: none;
+    }
+    canvas.panning { cursor: ns-resize; }
+    .view-controls { margin-left: auto; display: flex; gap: 7px; }
+    .drag-number-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .drag-number-value {
+      flex: 0 0 78px;
+      width: 78px;
+      min-height: 32px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #151613;
+      color: var(--ink);
+      font-size: 12px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      cursor: nesw-resize;
+      touch-action: none;
+      user-select: none;
+    }
+    .drag-number-value:focus-visible {
+      border-color: var(--cyan);
+      outline: 1px solid var(--cyan);
+      outline-offset: 1px;
+    }
+    .view-controls .drag-number-control { gap: 4px; font-size: 11px; }
+    .view-controls .drag-number-value {
+      flex-basis: 58px;
+      width: 58px;
+      min-height: 26px;
+      padding: 0 6px;
+    }
+    aside {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 54px repeat(8, auto) minmax(0, 1fr);
+      background: var(--panel);
+    }
+    .side-title {
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+    .control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 54px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .control.stacked { grid-template-columns: 1fr; }
+    .control label { color: var(--muted); font-size: 13px; }
+    .control.drag-number-control { display: flex; }
+    select {
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      padding: 0 7px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #151613;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .value { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .levels { display: grid; gap: 5px; }
+    .level-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) 34px;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .level-track { height: 5px; overflow: hidden; border-radius: 3px; background: rgba(242,240,232,0.1); }
+    .level-fill { width: 0; height: 100%; background: var(--cyan); }
+    #output-level-fill { background: var(--green); }
+    .toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+    .toggle input { width: 17px; height: 17px; accent-color: var(--cyan); }
+    .orientation-control { display: flex; align-items: center; justify-content: space-between; }
+    .orientation-control > span { color: var(--muted); font-size: 13px; }
+    .pill-toggle { display: grid; gap: 6px; }
+    .pill-toggle-group {
+      position: relative;
+      display: inline-grid;
+      grid-auto-flow: column;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid rgba(118, 167, 255, 0.42);
+      border-radius: 999px;
+      background: #151613;
+    }
+    .pill-thumb {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: calc(50% - 6px);
+      height: calc(100% - 8px);
+      border-radius: 999px;
+      background: var(--ink);
+      pointer-events: none;
+    }
+    .pill-option {
+      position: relative;
+      z-index: 1;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+    }
+    .pill-toggle-group.is-animating .pill-thumb { transition: transform 180ms ease, width 180ms ease; }
+    .pill-toggle-group.is-animating .pill-option { transition: color 180ms ease; }
+    .pill-option.is-active { color: #151613; }
+    .meter {
+      align-self: end;
+      padding: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-line;
+      font-variant-numeric: tabular-nums;
+    }
+    .start-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      background: rgba(13, 14, 12, 0.92);
+    }
+    .start-overlay[hidden] { display: none; }
+    .start-panel {
+      width: min(420px, calc(100vw - 32px));
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      text-align: center;
+    }
+    .start-panel h2 { margin: 0 0 8px; font-size: 22px; }
+    .start-panel p { margin: 0 0 22px; color: var(--gold); font-size: 14px; }
+    .start-panel .command { width: 100%; min-height: 42px; }
+    .start-actions { display: grid; gap: 8px; }
+    .download-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(13, 14, 12, 0.88);
+    }
+    .download-overlay[hidden] { display: none; }
+    .download-panel {
+      width: min(520px, 100%);
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .download-header {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .download-header h2 { margin: 0; font-size: 18px; }
+    .close-button {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1;
+    }
+    .download-body { display: grid; gap: 14px; padding: 16px; }
+    .download-body > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .download-list { display: grid; gap: 8px; }
+    .download-link {
+      min-height: 54px;
+      display: grid;
+      align-content: center;
+      gap: 3px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .download-link:hover, .download-link:focus-visible { border-color: var(--cyan); }
+    .download-link strong { font-size: 13px; }
+    .download-link span { color: var(--muted); font-size: 12px; }
+    .download-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .download-meta a { color: var(--cyan); }
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .app { height: auto; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: 620px auto; }
+      .stage { border-right: 0; }
+      aside { grid-template-rows: 48px repeat(8, auto) 120px; }
+    }
+    @media (max-width: 560px) {
+      .app { grid-template-rows: 560px auto; }
+      .stage { grid-template-rows: 54px minmax(0, 1fr) 40px; }
+      .topbar { gap: 6px; padding: 0 8px; }
+      h1 { font-size: 16px; }
+      #midi-chip, #engine-chip { display: none; }
+      .chip { min-width: 62px; max-width: 102px; padding: 5px 6px; }
+      #download-button { width: 36px; min-width: 36px; padding: 0; font-size: 0; }
+      #download-button::before { content: "\2193"; font-size: 18px; }
+      .statusbar { padding: 0 8px; gap: 6px; }
+      .view-controls .drag-number-control > span { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage">
+      <header class="topbar">
+        <h1>Harmonizer</h1>
+        <div id="pitch-chip" class="chip">pitch --</div>
+        <div id="midi-chip" class="chip">notes 0</div>
+        <div id="engine-chip" class="chip">stopped</div>
+        <button id="download-button" class="command" type="button">Download</button>
+        <button id="start-button" class="command" type="button">Start audio</button>
+        <button id="stop-button" class="command" type="button" hidden>Stop</button>
+      </header>
+      <canvas id="roll" aria-label="Live vocal and MIDI pitch roll" title="Drag the piano to change the visible pitch range."></canvas>
+      <footer class="statusbar">
+        <span id="rms-text">rms 0.0000</span>
+        <span id="stable-text">unvoiced</span>
+        <div class="view-controls">
+          <label class="drag-number-control"><span>Time</span><button id="time-span" class="drag-number-value" type="button" role="spinbutton" aria-label="Seconds across screen"></button></label>
+          <label class="drag-number-control"><span>Pitch</span><button id="pitch-span" class="drag-number-value" type="button" role="spinbutton" aria-label="Semitones across screen"></button></label>
+        </div>
+      </footer>
+    </section>
+    <aside>
+      <div class="side-title">Controls</div>
+      <section class="control stacked">
+        <div class="row"><label for="input-device">Audio input</label><span id="input-status" class="value">permission needed</span></div>
+        <select id="input-device" aria-label="Microphone input"></select>
+        <div class="row"><label for="output-device">Audio output</label><span id="output-status" class="value">system default</span></div>
+        <select id="output-device" aria-label="Audio output"><option value="">System default</option></select>
+        <div class="row"><label for="midi-input">MIDI input</label><span id="midi-status" class="value">pending</span></div>
+        <select id="midi-input" aria-label="MIDI input device"><option value="all">All MIDI devices</option><option value="none">None</option></select>
+        <div class="levels" aria-label="Audio levels">
+          <div class="level-row"><span>in</span><div class="level-track"><div id="input-level-fill" class="level-fill"></div></div><span id="input-level-text">-inf</span></div>
+          <div class="level-row"><span>out</span><div class="level-track"><div id="output-level-fill" class="level-fill"></div></div><span id="output-level-text">-inf</span></div>
+        </div>
+        <button id="test-tone-button" class="command" type="button">Test output</button>
+      </section>
+      <label class="control drag-number-control"><span>Blend</span><button id="blend" class="drag-number-value" type="button" role="spinbutton" aria-label="Wet dry blend"></button></label>
+      <label class="control drag-number-control"><span>Monitor gain</span><button id="gain" class="drag-number-value" type="button" role="spinbutton" aria-label="Monitor gain"></button></label>
+      <label class="control drag-number-control"><span>Gate</span><button id="gate" class="drag-number-value" type="button" role="spinbutton" aria-label="Pitch gate"></button></label>
+      <label class="control drag-number-control"><span>Stability</span><button id="stability" class="drag-number-value" type="button" role="spinbutton" aria-label="Pitch stability window"></button></label>
+      <label class="control drag-number-control"><span>Keyboard octave</span><button id="keyboard-octave" class="drag-number-value" type="button" role="spinbutton" aria-label="Computer keyboard start octave"></button></label>
+      <section class="control stacked">
+        <label class="toggle"><input id="formants" type="checkbox" checked>Preserve formants</label>
+      </section>
+      <section class="control orientation-control">
+        <span>Scroll direction</span>
+        <div class="pill-toggle">
+          <div id="orientation-group" class="pill-toggle-group" role="tablist" aria-label="Scroll direction">
+            <span class="pill-thumb" aria-hidden="true"></span>
+            <button id="horizontal-flow" class="pill-option" type="button" role="tab">Horizontal</button>
+            <button id="vertical-flow" class="pill-option" type="button" role="tab">Vertical</button>
+          </div>
+        </div>
+      </section>
+      <div id="meter" class="meter">engine stopped</div>
+    </aside>
+  </main>
+  <div id="start-overlay" class="start-overlay">
+    <div class="start-panel">
+      <h2>Harmonizer</h2>
+      <p>Use headphones to prevent microphone feedback.</p>
+      <div class="start-actions">
+        <button id="start-overlay-button" class="command" type="button">Start audio</button>
+        <button id="start-download-button" class="command" type="button">Download</button>
+      </div>
+    </div>
+  </div>
+  <div id="download-overlay" class="download-overlay" hidden>
+    <section class="download-panel" role="dialog" aria-modal="true" aria-labelledby="download-title">
+      <header class="download-header">
+        <h2 id="download-title">Download Harmonizer</h2>
+        <button id="download-close-button" class="close-button" type="button" aria-label="Close download dialog">&#215;</button>
+      </header>
+      <div class="download-body">
+        <p>The browser edition works everywhere, but Rubber Band Live 512 requires the native edition. Download a ready-to-run package for your operating system.</p>
+        <div class="download-list">
+          <a class="download-link" href="https://github.com/DiegoZC4/harmonizer/releases/latest/download/Harmonizer-macOS-universal.dmg">
+            <strong>macOS</strong>
+            <span>Universal app for Apple Silicon and Intel.</span>
+          </a>
+          <a class="download-link" href="https://github.com/DiegoZC4/harmonizer/releases/latest/download/Harmonizer-Windows-x64-Setup.exe">
+            <strong>Windows 10 or 11</strong>
+            <span>x64 installer with the Live 512 engine.</span>
+          </a>
+          <a class="download-link" href="https://github.com/DiegoZC4/harmonizer/releases/latest/download/Harmonizer-Linux-x86_64.AppImage">
+            <strong>Linux x86_64</strong>
+            <span>Portable AppImage for common desktop distributions.</span>
+          </a>
+          <a class="download-link" href="https://github.com/DiegoZC4/harmonizer/releases/latest">
+            <strong>Source and other formats</strong>
+            <span>Portable ZIPs, checksums, source, and release notes.</span>
+          </a>
+        </div>
+        <div class="download-meta">
+          <span>Latest release</span>
+          <a href="https://github.com/DiegoZC4/harmonizer/releases/latest/download/SHA256SUMS.txt">SHA-256 checksums</a>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script type="module" src="./app.js?v=20260712-7"></script>
+</body>
+</html>

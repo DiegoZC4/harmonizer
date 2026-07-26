@@ -1,0 +1,388 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Match tag to VERSION.txt
+        id: version
+        shell: bash
+        run: |
+          version="$(<VERSION.txt)"
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            printf 'Tag %s does not match VERSION.txt %s\n' "$GITHUB_REF_NAME" "$version" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          git diff --check
+
+  mac-binary:
+    name: macOS binary (${{ matrix.arch }})
+    needs: validate
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install static audio dependencies
+        run: brew install pkg-config portaudio aubio libsamplerate
+      - name: Build portable binary
+        run: |
+          make harmonizer_web_portable \
+            BREW_PREFIX="$(brew --prefix)" \
+            CXX=clang++
+          actual_arch="$(lipo -archs harmonizer_web_portable)"
+          [[ "$actual_arch" == "${{ matrix.arch }}" ]]
+          if otool -L harmonizer_web_portable |
+             grep -E '/(opt/homebrew|usr/local)/(opt/)?'; then
+            printf 'Portable binary contains a Homebrew runtime dependency.\n' >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-binary-${{ matrix.arch }}
+          path: harmonizer_web_portable
+          if-no-files-found: error
+
+  mac-package:
+    name: macOS universal package
+    needs: [validate, mac-binary]
+    runs-on: macos-15
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
+      notarized: ${{ steps.notarize.outputs.notarized }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-binary-arm64
+          path: mac-binaries/arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-binary-x86_64
+          path: mac-binaries/x86_64
+      - name: Create universal executable
+        run: |
+          lipo -create \
+            mac-binaries/arm64/harmonizer_web_portable \
+            mac-binaries/x86_64/harmonizer_web_portable \
+            -output harmonizer_web_universal
+          chmod +x harmonizer_web_universal
+          [[ "$(lipo -archs harmonizer_web_universal)" == "x86_64 arm64" ||
+             "$(lipo -archs harmonizer_web_universal)" == "arm64 x86_64" ]]
+      - name: Import Apple signing identity
+        id: signing
+        env:
+          CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          signed=false
+          identity="-"
+          if [[ -n "$CERTIFICATE" &&
+                -n "$CERTIFICATE_PASSWORD" &&
+                -n "$SIGNING_IDENTITY" ]]; then
+            keychain="$RUNNER_TEMP/harmonizer-signing.keychain-db"
+            certificate="$RUNNER_TEMP/harmonizer-signing.p12"
+            keychain_password="$(uuidgen)"
+            printf '%s' "$CERTIFICATE" | /usr/bin/base64 -D > "$certificate"
+            security create-keychain -p "$keychain_password" "$keychain"
+            security set-keychain-settings -lut 21600 "$keychain"
+            security unlock-keychain -p "$keychain_password" "$keychain"
+            security import "$certificate" \
+              -P "$CERTIFICATE_PASSWORD" \
+              -A \
+              -t cert \
+              -f pkcs12 \
+              -k "$keychain"
+            security set-key-partition-list \
+              -S apple-tool:,apple: \
+              -s \
+              -k "$keychain_password" \
+              "$keychain"
+            security list-keychains -d user -s "$keychain"
+            identity="$SIGNING_IDENTITY"
+            signed=true
+          fi
+          printf 'APPLE_SIGNING_IDENTITY=%s\n' "$identity" >> "$GITHUB_ENV"
+          printf 'signed=%s\n' "$signed" >> "$GITHUB_OUTPUT"
+      - name: Build app, ZIP, and DMG
+        env:
+          HARMONIZER_BINARY: ${{ github.workspace }}/harmonizer_web_universal
+          HARMONIZER_MAC_LABEL: universal
+        run: ./scripts/build_macos_app.sh
+      - name: Notarize signed packages
+        id: notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          notarized=false
+          if [[ "$SIGNED" == "true" &&
+                -n "$APPLE_ID" &&
+                -n "$APPLE_TEAM_ID" &&
+                -n "$APPLE_APP_PASSWORD" ]]; then
+            app_archive="$RUNNER_TEMP/Harmonizer-notarization.zip"
+            ditto -c -k --sequesterRsrc --keepParent \
+              dist/Harmonizer.app "$app_archive"
+            xcrun notarytool submit "$app_archive" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --wait
+            xcrun stapler staple dist/Harmonizer.app
+            xcrun stapler validate dist/Harmonizer.app
+
+            rm -f \
+              dist/Harmonizer-macOS-universal.zip \
+              dist/Harmonizer-macOS-universal.dmg
+            ditto -c -k --sequesterRsrc --keepParent \
+              dist/Harmonizer.app \
+              dist/Harmonizer-macOS-universal.zip
+            mkdir -p "$RUNNER_TEMP/harmonizer-dmg"
+            ditto dist/Harmonizer.app \
+              "$RUNNER_TEMP/harmonizer-dmg/Harmonizer.app"
+            ln -s /Applications "$RUNNER_TEMP/harmonizer-dmg/Applications"
+            hdiutil create \
+              -volname Harmonizer \
+              -srcfolder "$RUNNER_TEMP/harmonizer-dmg" \
+              -ov \
+              -format UDZO \
+              dist/Harmonizer-macOS-universal.dmg
+            codesign \
+              --force \
+              --timestamp \
+              --sign "$APPLE_SIGNING_IDENTITY" \
+              dist/Harmonizer-macOS-universal.dmg
+            xcrun notarytool submit dist/Harmonizer-macOS-universal.dmg \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --wait
+            xcrun stapler staple dist/Harmonizer-macOS-universal.dmg
+            xcrun stapler validate dist/Harmonizer-macOS-universal.dmg
+            spctl --assess --type execute --verbose=2 dist/Harmonizer.app
+            notarized=true
+          fi
+          printf 'notarized=%s\n' "$notarized" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: |
+            dist/Harmonizer-macOS-universal.dmg
+            dist/Harmonizer-macOS-universal.zip
+          if-no-files-found: error
+
+  linux-package:
+    name: Linux AppImage
+    needs: validate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config curl zip \
+            portaudio19-dev libaubio-dev desktop-file-utils
+      - name: Build and test
+        run: |
+          cmake --preset test
+          cmake --build --preset test
+          ctest --preset test
+      - name: Package AppImage
+        run: ./scripts/package_linux_appimage.sh build/test
+      - name: AppImage smoke test
+        run: dist/Harmonizer-Linux-x86_64.AppImage --appimage-extract-and-run --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: dist/Harmonizer-Linux-x86_64.AppImage
+          if-no-files-found: error
+
+  windows-package:
+    name: Windows installer
+    needs: validate
+    runs-on: windows-2025
+    outputs:
+      signed: ${{ steps.sign.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-portaudio
+            mingw-w64-ucrt-x86_64-aubio
+            zip
+      - name: Build, test, and collect runtime
+        shell: msys2 {0}
+        run: |
+          cmake --preset test
+          cmake --build --preset test
+          ctest --preset test
+          ./scripts/package_windows.sh build/test
+          ./dist/Harmonizer-Windows-x64/harmonizer_web.exe --help
+      - name: Sign application when configured
+        id: sign
+        shell: pwsh
+        env:
+          CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $Signed = "false"
+          if ($env:CERTIFICATE -and $env:CERTIFICATE_PASSWORD) {
+            $CertificatePath = Join-Path $env:RUNNER_TEMP "harmonizer-signing.pfx"
+            [IO.File]::WriteAllBytes(
+              $CertificatePath,
+              [Convert]::FromBase64String($env:CERTIFICATE)
+            )
+            $SignTool = Get-ChildItem `
+              "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+              Sort-Object FullName |
+              Select-Object -Last 1
+            if (-not $SignTool) { throw "signtool.exe was not found" }
+            & $SignTool.FullName sign `
+              /fd SHA256 `
+              /f $CertificatePath `
+              /p $env:CERTIFICATE_PASSWORD `
+              /tr http://timestamp.digicert.com `
+              /td SHA256 `
+              "dist\Harmonizer-Windows-x64\harmonizer_web.exe"
+            if ($LASTEXITCODE -ne 0) { throw "Application signing failed" }
+            $Signed = "true"
+          }
+          "signed=$Signed" >> $env:GITHUB_OUTPUT
+      - name: Rebuild portable ZIP
+        shell: pwsh
+        run: |
+          Remove-Item "dist\Harmonizer-Windows-x64.zip" -Force
+          Compress-Archive `
+            -Path "dist\Harmonizer-Windows-x64" `
+            -DestinationPath "dist\Harmonizer-Windows-x64.zip" `
+            -CompressionLevel Optimal
+      - name: Build installer
+        shell: pwsh
+        env:
+          HARMONIZER_VERSION: ${{ needs.validate.outputs.version }}
+          HARMONIZER_DIST_DIR: ${{ github.workspace }}\dist\Harmonizer-Windows-x64
+          HARMONIZER_OUTPUT_DIR: ${{ github.workspace }}\dist
+        run: |
+          choco install innosetup --no-progress -y
+          $Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $Iscc "packaging\windows\Harmonizer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+      - name: Sign installer when configured
+        if: steps.sign.outputs.signed == 'true'
+        shell: pwsh
+        env:
+          CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $CertificatePath = Join-Path $env:RUNNER_TEMP "harmonizer-signing.pfx"
+          $SignTool = Get-ChildItem `
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          & $SignTool.FullName sign `
+            /fd SHA256 `
+            /f $CertificatePath `
+            /p $env:CERTIFICATE_PASSWORD `
+            /tr http://timestamp.digicert.com `
+            /td SHA256 `
+            "dist\Harmonizer-Windows-x64-Setup.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Installer signing failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: |
+            dist/Harmonizer-Windows-x64-Setup.exe
+            dist/Harmonizer-Windows-x64.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs:
+      - validate
+      - mac-package
+      - linux-package
+      - windows-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: Package corresponding source
+        env:
+          HARMONIZER_OUTPUT_DIR: ${{ github.workspace }}/release
+        run: ./scripts/package_source.sh
+      - name: Generate checksums and notes
+        env:
+          MAC_SIGNED: ${{ needs.mac-package.outputs.signed }}
+          MAC_NOTARIZED: ${{ needs.mac-package.outputs.notarized }}
+          WINDOWS_SIGNED: ${{ needs.windows-package.outputs.signed }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          (
+            cd release
+            sha256sum \
+              Harmonizer-Linux-x86_64.AppImage \
+              Harmonizer-macOS-universal.dmg \
+              Harmonizer-macOS-universal.zip \
+              Harmonizer-source.zip \
+              Harmonizer-Windows-x64-Setup.exe \
+              Harmonizer-Windows-x64.zip \
+              > SHA256SUMS.txt
+          )
+          {
+            printf '# Harmonizer %s\n\n' "$VERSION"
+            printf 'Download the package for your operating system below. '
+            printf 'The browser edition is available at '
+            printf 'https://diegozc4.github.io/harmonizer/.\n\n'
+            printf 'macOS signed: `%s`; notarized: `%s`.  \n' \
+              "$MAC_SIGNED" "$MAC_NOTARIZED"
+            printf 'Windows signed: `%s`.\n\n' "$WINDOWS_SIGNED"
+            printf 'See `QUICKSTART.md` for audio setup and first-launch notes.\n'
+          } > release-notes.md
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --verify-tag \
+            --title "Harmonizer ${{ needs.validate.outputs.version }}" \
+            --notes-file release-notes.md

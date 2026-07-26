@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Harmonizer
+Comment=Live MIDI-controlled vocal harmonizer
+Exec=Harmonizer
+Icon=harmonizer
+Type=Application
+Categories=AudioVideo;Audio;
+Terminal=false

@@ -1,0 +1,43 @@
+name: Bug report
+description: Report an audio, MIDI, browser, or packaging problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Edition
+      options:
+        - Native macOS
+        - Native Windows
+        - Native Linux
+        - Browser edition
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: route
+    attributes:
+      label: Audio and MIDI route
+      description: Include input, output, MIDI device, sample rate, and backend.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include reproduction steps, expected behavior, and the exact error.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste relevant GUI diagnostics or native log lines. Remove personal paths.
+      render: text

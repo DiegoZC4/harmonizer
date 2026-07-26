@@ -1,0 +1,5 @@
+#define HARMONIZER_ENGINE_HEADER "backends/rubberband_live128_engine.hpp"
+#define HARMONIZER_DSP_BACKEND "rubberband-live-128"
+#define HARMONIZER_DSP_TITLE "Rubber Band LiveShifter 128"
+#define HARMONIZER_BACKEND_KEY "live128"
+#include "../harmonizer_web.cpp"

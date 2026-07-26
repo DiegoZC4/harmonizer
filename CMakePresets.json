@@ -1,0 +1,50 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "HARMONIZER_BUILD_BACKEND_LAB": "OFF"
+      }
+    },
+    {
+      "name": "test",
+      "displayName": "Release with backend tests",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/test",
+      "cacheVariables": {
+        "HARMONIZER_BUILD_BACKEND_LAB": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "jobs": 4
+    },
+    {
+      "name": "test",
+      "configurePreset": "test",
+      "jobs": 4
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test",
+      "configurePreset": "test",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

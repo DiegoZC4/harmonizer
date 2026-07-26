@@ -1,0 +1,41 @@
+#!/bin/zsh
+
+set -euo pipefail
+unsetopt BG_NICE
+
+contents="${0:A:h:h}"
+support="$HOME/Library/Application Support/Harmonizer"
+port="${HARMONIZER_WEB_PORT:-8794}"
+url="http://127.0.0.1:${port}/"
+
+if /usr/bin/curl -fsS "${url}health" >/dev/null 2>&1; then
+  /usr/bin/open "$url"
+  exit 0
+fi
+
+/bin/mkdir -p "$support/web"
+/bin/cp "$contents/Resources/web/index.html" "$support/web/index.html"
+cd "$support"
+
+server_pid=""
+cleanup() {
+  if [[ -n "$server_pid" ]] && /bin/kill -0 "$server_pid" 2>/dev/null; then
+    /bin/kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup INT TERM EXIT
+
+"$contents/MacOS/harmonizer_web" --port "$port" >> "$support/harmonizer.log" 2>&1 &
+server_pid=$!
+
+for _attempt in {1..150}; do
+  if /usr/bin/curl -fsS "${url}health" >/dev/null 2>&1; then
+    /usr/bin/open "$url"
+    wait "$server_pid"
+    exit $?
+  fi
+  /bin/sleep 0.1
+done
+
+exit 1

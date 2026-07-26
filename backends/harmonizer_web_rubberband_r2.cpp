@@ -1,0 +1,5 @@
+#define HARMONIZER_ENGINE_HEADER "backends/rubberband_r2_engine.hpp"
+#define HARMONIZER_DSP_BACKEND "rubberband-r2-short"
+#define HARMONIZER_BACKEND_KEY "r2"
+#define HARMONIZER_DSP_TITLE "Rubber Band R2 Short"
+#include "../harmonizer_web.cpp"
