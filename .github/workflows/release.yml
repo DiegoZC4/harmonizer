@@ -218,6 +218,7 @@ jobs:
       - name: Package AppImage
         run: ./scripts/package_linux_appimage.sh build/test
       - name: AppImage smoke test
+        timeout-minutes: 1
         run: dist/Harmonizer-Linux-x86_64.AppImage --appimage-extract-and-run --help
       - uses: actions/upload-artifact@v7
         with:

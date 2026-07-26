@@ -2,6 +2,14 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+args=("$@")
+
+case "${args[0]:-}" in
+  --help|-h|--render)
+    exec "$root/harmonizer_web" "${args[@]}"
+    ;;
+esac
+
 if [[ "$(uname -s)" == "Darwin" ]]; then
   support="$HOME/Library/Application Support/Harmonizer"
 else
@@ -13,6 +21,12 @@ else
   resources="$root"
 fi
 port="${HARMONIZER_WEB_PORT:-8794}"
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [[ "${args[$i]}" == "--port" && $((i + 1)) -lt ${#args[@]} ]]; then
+    port="${args[$((i + 1))]}"
+    break
+  fi
+done
 url="http://127.0.0.1:$port/"
 
 health_ready() {
@@ -47,7 +61,8 @@ mkdir -p "$support/web"
 cp "$resources/web/index.html" "$support/web/index.html"
 cd "$support"
 
-"$root/harmonizer_web" --port "$port" >> "$support/harmonizer.log" 2>&1 &
+"$root/harmonizer_web" "${args[@]}" --port "$port" \
+  >> "$support/harmonizer.log" 2>&1 &
 server_pid=$!
 cleanup() {
   if kill -0 "$server_pid" 2>/dev/null; then kill "$server_pid" 2>/dev/null || true; fi
