@@ -70,6 +70,7 @@ chmod +x "$appdir/usr/bin/Harmonizer" "$appdir/usr/bin/harmonizer_web"
   --desktop-file "$appdir/usr/share/applications/harmonizer.desktop" \
   --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/harmonizer.svg"
 
+rm -f "$appdir/AppRun"
 cp "$root/packaging/linux/AppRun" "$appdir/AppRun"
 chmod +x "$appdir/AppRun"
 ARCH=x86_64 "$appimagetool" --appimage-extract-and-run "$appdir" "$output"
